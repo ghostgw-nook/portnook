@@ -1,0 +1,1626 @@
+<!doctype html>
+<html lang="de-CH">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Cdefs%3E%3ClinearGradient id='pfa-g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%239a3412'/%3E%3Cstop offset='1' stop-color='%23f97316'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='512' height='512' rx='112' fill='url(%23pfa-g)'/%3E%3Cpath d='M256 104 424 240h-44v164H132V240H88z' fill='%23fff'/%3E%3Cpath d='M220 404v-88a36 36 0 0 1 72 0v88z' fill='%23ea580c'/%3E%3C/svg%3E">
+<title>portnook</title>
+<script>
+// UI texts per language (lang/*.json), filled in by the agent when it serves this page
+const PF_I18N = /*PF_I18N*/{}/*PF_I18N*/;
+// theme before first paint (no flash): "light" / "dark" from localStorage, otherwise the system setting
+try { const t = localStorage.getItem("pf-theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) { /* storage blocked */ }
+</script>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f4f6f8; --card: #ffffff; --fg: #1c2430; --muted: #5a6877; --line: #dde3ea;
+  --accent: #2563eb; --accent-fg: #ffffff; --ok: #16a34a; --warn: #c27c0e; --err: #dc2626;
+  --code: #eef2f6; --shadow: 0 1px 3px rgba(0,0,0,.08);
+  --c1: #2563eb; --c2: #d9480f; --c3: #0f766e; --c4: #7c3aed; --grid: #e6e9ee;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #11161d; --card: #1a212b; --fg: #e3e8ee; --muted: #9aa8b7; --line: #2b3542;
+    --accent: #3b82f6; --accent-fg: #ffffff; --ok: #22c55e; --warn: #f59e0b; --err: #f87171;
+    --code: #232c38; --shadow: none;
+    --c1: #60a5fa; --c2: #fb923c; --c3: #2dd4bf; --c4: #b197fc; --grid: #2a313d;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #11161d; --card: #1a212b; --fg: #e3e8ee; --muted: #9aa8b7; --line: #2b3542;
+  --accent: #3b82f6; --accent-fg: #ffffff; --ok: #22c55e; --warn: #f59e0b; --err: #f87171;
+  --code: #232c38; --shadow: none;
+  --c1: #60a5fa; --c2: #fb923c; --c3: #2dd4bf; --c4: #b197fc; --grid: #2a313d;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--fg);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+header { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line);
+  background: var(--card); position: sticky; top: 0; z-index: 2; }
+header h1 { font-size: 17px; margin: 0; font-weight: 650; }
+header .logo { display: block; flex: none; }
+header .ver { color: var(--muted); font-size: 13px; }
+header .sp { flex: 1; }
+header { flex-wrap: wrap; }
+nav#nav { order: 9; flex-basis: 100%; display: flex; gap: 6px; overflow-x: auto; padding-top: 2px; }
+nav#nav button { padding: 5px 11px; font-size: 13.5px; white-space: nowrap; }
+nav#nav button.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+main { width: 90%; max-width: none; margin: 0 auto; padding: 16px 0; }  /* 0.23.0: 90 % of the window (owner) */
+@media (max-width: 700px) { main { width: auto; padding: 16px; } }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px;
+  box-shadow: var(--shadow); margin-bottom: 16px; min-width: 0; }
+.card h2 { font-size: 16px; font-weight: 650; margin: 0 0 10px; display: flex; align-items: center; gap: 8px; }
+.card h3 { font-size: 14px; margin: 14px 0 6px; }
+p { margin: 6px 0 10px; }
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+label { display: block; font-weight: 600; margin: 12px 0 4px; font-size: 14px; }
+input[type=text], input[type=password], textarea, select {
+  width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--bg);
+  color: var(--fg); font: inherit; }
+textarea { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; resize: vertical; }
+input:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+button { font: inherit; padding: 8px 14px; border-radius: 7px; border: 1px solid var(--line); cursor: pointer;
+  background: var(--card); color: var(--fg); }
+button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+button:disabled { opacity: .55; cursor: progress; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
+.choice { display: flex; gap: 10px; flex-wrap: wrap; }
+.choice label { font-weight: 500; display: flex; gap: 8px; align-items: center; padding: 8px 12px; margin: 0;
+  border: 1px solid var(--line); border-radius: 7px; cursor: pointer; }
+.steps { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; padding: 0; list-style: none; }
+.steps li { padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); font-size: 13px; color: var(--muted);
+  cursor: pointer; background: var(--card); }
+.steps li.done { color: var(--ok); border-color: var(--ok); }
+.steps li.cur { color: var(--accent-fg); background: var(--accent); border-color: var(--accent); }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+.grid .card { margin-bottom: 0; }
+dl { display: grid; grid-template-columns: max-content 1fr; gap: 3px 12px; margin: 0; font-size: 14px; }
+dt { color: var(--muted); }
+dd { margin: 0; overflow-wrap: anywhere; }
+.dot { width: 11px; height: 11px; border-radius: 50%; display: inline-block; background: var(--muted); flex: none; }
+.dot.ok { background: var(--ok); } .dot.warn { background: var(--warn); } .dot.err { background: var(--err); }
+.msg { padding: 10px 12px; border-radius: 7px; margin-top: 12px; border: 1px solid var(--line); background: var(--code);
+  overflow-wrap: anywhere; }
+.msg.ok { border-color: var(--ok); } .msg.err { border-color: var(--err); } .msg.warn { border-color: var(--warn); }
+.msg dl { margin-top: 6px; }
+.rr-epair { display: flex; gap: 6px; } .rr-epair .rr-esub { flex: 0 0 38%; min-width: 70px; }
+pre.log { background: var(--code); border-radius: 7px; padding: 10px; max-height: 340px; overflow: auto; font-size: 12px;
+  margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.phead { display: flex; align-items: center; gap: 10px; margin: 6px 0 2px; }
+.sec { font-size: 17px; margin: 26px 0 2px; font-weight: 650; }
+.phead h1 { font-size: 21px; margin: 0; font-weight: 650; }
+.lead { color: var(--muted); margin: 0 0 16px; font-size: 14px; }
+details.help { margin: 0 0 10px; font-size: 13px; color: var(--muted); }
+details.help summary { cursor: pointer; color: var(--accent); width: max-content; }
+details.help p { margin: 6px 0; }
+details.help pre { margin-top: 6px; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 16px; padding-top: 14px;
+  border-top: 1px solid var(--line); }
+.card > dl + .actions { margin-top: 12px; }
+.hidden { display: none !important; }
+.hint { font-size: 13px; color: var(--muted); margin-top: 4px; }
+a { color: var(--accent); }
+.lights { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13.5px; color: var(--muted); align-items: center; }
+.lights span { display: inline-flex; align-items: center; gap: 6px; }
+.lights b { color: var(--fg); font-weight: 600; }
+table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+th, td { text-align: left; padding: 6px 5px; border-bottom: 1px solid var(--line); vertical-align: top; overflow-wrap: anywhere; }
+th { color: var(--muted); font-weight: 600; }
+.tablewrap { overflow-x: auto; }
+td select + input { margin-top: 6px; }
+.rr-out { white-space: nowrap; }
+td button { white-space: nowrap; }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0 16px; }
+label.inline { display: flex; gap: 8px; align-items: center; font-weight: 500; }
+details.mn-profile { position: relative; }
+details.mn-profile summary { list-style: none; cursor: pointer; padding: 8px 10px; border: 1px solid var(--line); border-radius: 7px;
+  background: var(--bg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+details.mn-profile summary::-webkit-details-marker { display: none; }
+details.mn-profile.off summary { opacity: .55; pointer-events: none; }
+details.mn-profile .mn-prof-list { margin-top: 4px; padding: 6px 10px;  /* inline: the table wrapper scrolls and would clip a popup */
+  background: var(--card); border: 1px solid var(--line); border-radius: 7px; }
+details.mn-profile .mn-prof-list label { display: flex; gap: 6px; align-items: center; white-space: nowrap; padding: 3px 0; }
+code { background: var(--code); padding: 1px 5px; border-radius: 4px; font-size: 13px; }
+h3 { font-size: 14px; margin: 16px 0 4px; }
+@media (max-width: 520px) { dl { grid-template-columns: 1fr; } dt { margin-top: 6px; } }
+</style>
+</head>
+<body>
+<header>
+  <svg class="logo" width="26" height="26" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><defs><linearGradient id="pfa-g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#9a3412"/><stop offset="1" stop-color="#f97316"/></linearGradient></defs><rect width="512" height="512" rx="112" fill="url(#pfa-g)"/><path d="M256 104 424 240h-44v164H132V240H88z" fill="#fff"/><path d="M220 404v-88a36 36 0 0 1 72 0v88z" fill="#ea580c"/></svg><h1>{{ui.pf_agent}}</h1><span class="ver" id="ver"></span><span class="sp"></span>
+  <nav id="nav" class="hidden">
+    <button type="button" data-view="status">{{ui.ubersicht}}</button>
+    <button type="button" data-view="vpn">{{ui.verbindung}}</button>
+    <button type="button" data-view="myaddr">{{ui.namen}}</button>
+    <button type="button" data-view="redirect">{{ui.weiterleitung}}</button>
+    <button type="button" data-view="system">{{ui.system}}</button>
+  </nav>
+  <button id="btn-wizard" class="hidden" type="button">{{ui.assistent}}</button>
+  <button id="btn-logout" class="hidden" type="button">{{ui.abmelden}}</button>
+</header>
+<main>
+
+<!-- Login -->
+<section id="v-login" class="card hidden">
+  <h2>{{login.anmelden}}</h2>
+  <form id="f-login">
+    <label for="login-pw">{{login.passwort}}</label>
+    <input type="password" id="login-pw" autocomplete="current-password" required>
+    <div class="row"><button class="primary" type="submit">{{login.anmelden}}</button></div>
+    <div id="login-msg"></div>
+  </form>
+</section>
+
+<!-- Wizard -->
+<section id="v-wizard" class="hidden">
+  <ol class="steps" id="steps">
+    <li data-step="1">{{wizard.1_passwort}}</li><li data-step="2">{{wizard.2_vpn}}</li><li data-step="3">{{wizard.3_backend}}</li>
+    <li data-step="4">{{wizard.4_zusammenfassung}}</li>
+  </ol>
+  <div class="card step" data-step="1">
+    <h2>{{wizard.1_passwort_fur_dieses_webui}}</h2>
+    <p class="muted" id="pw-info">{{wizard.mindestens_8_zeichen_das_passwort}}</p>
+    <form id="f-pw">
+      <div id="pw-old-wrap" class="hidden">
+        <label for="pw0">{{wizard.bisheriges_passwort}}</label>
+        <input type="password" id="pw0" autocomplete="current-password">
+      </div>
+      <label for="pw1">{{wizard.neues_passwort}}</label>
+      <input type="password" id="pw1" autocomplete="new-password" minlength="8" required>
+      <label for="pw2">{{wizard.passwort_wiederholen}}</label>
+      <input type="password" id="pw2" autocomplete="new-password" minlength="8" required>
+      <div class="row">
+        <button class="primary" type="submit">{{wizard.passwort_speichern}}</button>
+        <button type="button" class="next hidden" id="pw-skip">{{wizard.weiter_ohne_anderung}}</button>
+      </div>
+      <div id="pw-msg"></div>
+    </form>
+  </div>
+
+  <div class="card step" data-step="2">
+    <h2>{{wizard.2_vpn_2}}</h2>
+    <p class="muted">{{wizard.mit_vpn_sieht_dein_internetanbieter}} <b>{{wizard.proton}}</b> {{wizard.der_port_wird_per_nat}} <b>{{wizard.fester_port}}</b> {{wizard.andere_anbieter_z_b_airvpn}}</p>
+    <div class="choice">
+      <label><input type="radio" name="proton" value="on" checked> {{wizard.proton_vpn_nat_pmp}}</label>
+      <label><input type="radio" name="proton" value="fixed"> {{wizard.anderer_anbieter_fester_port}}</label>
+      <label><input type="radio" name="proton" value="off"> {{wizard.ohne_vpn}}</label>
+    </div>
+    <div id="proton-on">
+      <div id="proton-ports-wrap" class="hidden">
+        <label for="proton-ports">{{wizard.freigegebene_ports_tcp_durch_komma}}</label>
+        <input type="text" id="proton-ports" placeholder="43210" spellcheck="false" autocomplete="off">
+        <div class="hint">{{wizard.nur_diese_ports_werden_von}}</div>
+      </div>
+      <label for="proton-file">{{wizard.datei_wg_conf}}</label>
+      <input type="file" id="proton-file" accept=".conf,text/plain">
+      <label for="proton-conf">{{wizard.oder_inhalt_einfugen}}</label>
+      <textarea id="proton-conf" rows="9" spellcheck="false" autocomplete="off"
+        placeholder="{{wizard.interface_privatekey_address_10_2}}"></textarea>
+      <div class="hint" id="proton-stored"></div>
+      <div class="hint">{{wizard.dns_ipv6_und_skript_eintrage}}</div>
+    </div>
+    <div class="row">
+      <button class="primary" type="button" id="proton-save">{{wizard.speichern_und_testen}}</button>
+      <button type="button" class="next hidden" id="proton-next">{{wizard.weiter}}</button>
+    </div>
+    <div id="proton-msg"></div>
+  </div>
+
+  <div class="card step" data-step="3">
+    <h2>{{wizard.3_backend_reverse_proxy}}</h2>
+    <p class="muted">{{wizard.adresse_deines_reverse_proxys_z}}</p>
+    <label for="backend">{{wizard.ip_port}}</label>
+    <input type="text" id="backend" placeholder="192.168.1.10:443" spellcheck="false" autocomplete="off">
+    <label for="lan">{{wizard.lan_netze_eines_pro_zeile}}</label>
+    <textarea id="lan" rows="3" spellcheck="false" placeholder="192.168.1.0/24"></textarea>
+    <div class="hint" id="lan-hint">{{wizard.netze_im_heimnetz_die_uber}}</div>
+    <div class="row">
+      <button class="primary" type="button" id="backend-save">{{wizard.speichern_und_testen}}</button>
+      <button type="button" class="next hidden" id="backend-next">{{wizard.weiter}}</button>
+    </div>
+    <div id="backend-msg"></div>
+  </div>
+
+  <div class="card step" data-step="4">
+    <h2>{{wizard.4_zusammenfassung_2}}</h2>
+    <dl id="summary"></dl>
+    <p class="muted small">{{wizard.als_nachstes_optional_unter}} <b>{{ui.zertifikat}}</b> {{wizard.einen_namen_bei_myaddr_tools}}</p>
+    <div class="row"><button class="primary" type="button" id="finish">{{wizard.zum_status}}</button></div>
+  </div>
+</section>
+
+<!-- Status -->
+<section id="v-status" class="hidden">
+  <div class="phead"><h1>{{ui.ubersicht}}</h1></div>
+  <p class="lead">{{lead.status}}</p>
+  <div class="card"><div class="lights" id="s-lights"></div></div>
+  <div class="grid">
+    <div class="card"><h2><span class="dot" id="d-proton"></span>{{ui.vpn}}</h2><div id="s-proton"></div></div>
+    <div class="card"><h2><span class="dot" id="d-backend"></span>{{status.backend}}</h2><dl id="s-backend"></dl></div>
+    <div class="card"><h2><span class="dot" id="d-ddns"></span>{{status.ddns_myaddr_tools}}</h2><div id="s-ddns"></div></div>
+    <div class="card"><h2><span class="dot" id="d-cert"></span>{{ui.zertifikat}}</h2><dl id="s-cert"></dl></div>
+    <div class="card"><h2><span class="dot" id="d-redirect"></span>{{status.redirect}}</h2><dl id="s-redirect"></dl></div>
+  </div>
+  <div class="card" style="margin-top:16px">
+    <h2>{{status.diagnose}}</h2>
+    <div class="actions">
+      <button type="button" data-action="proton-reconnect">{{status.vpn_neu_verbinden}}</button>
+      <button type="button" data-action="backend-test">{{status.backend_testen}}</button>
+      <button type="button" data-action="natpmp-renew">{{status.nat_pmp_erneuern}}</button>
+      <button type="button" data-action="ddns-update">{{status.ddns_jetzt_aktualisieren}}</button>
+    </div>
+    <div id="action-msg"></div>
+  </div>
+</section>
+
+<!-- VPN: profiles, failover, LAN entry -->
+<section id="v-vpn" class="hidden">
+  <div class="phead"><h1>{{ui.verbindung}}</h1></div>
+  <p class="lead">{{lead.vpn}}</p>
+  <div class="card">
+    <h2>{{vpn.vpn_profile_failover}}</h2>
+    <details class="help"><summary>{{ui.hilfe}}</summary><p>{{vpn.mehrere_vpn_zugange_falls_einer}}</p></details>
+    <div class="tablewrap"><table>
+      <thead><tr><th>#</th><th>{{vpn.name}}</th><th>{{vpn.art_ports}}</th><th>{{vpn.server}}</th><th>{{vpn.status}}</th><th></th></tr></thead>
+      <tbody id="vp-list"></tbody>
+    </table></div>
+    <div class="actions">
+      <button type="button" id="vp-new">{{vpn.neues_profil}}</button>
+      <button type="button" id="pc-on">{{vpn.vpn_einschalten}}</button>
+      <button type="button" id="pc-off">{{vpn.vpn_ausschalten}}</button>
+    </div>
+    <div id="pc-msg"></div>
+  </div>
+  <div class="card hidden" id="vp-card">
+    <h2 id="vp-form-title">{{vpn.neues_profil}}</h2>
+    <input type="hidden" id="vp-id">
+    <div class="cols">
+      <div><label for="vp-name">{{vpn.name}}</label><input type="text" id="vp-name" placeholder="{{vpn.proton_ch}}" maxlength="40" autocomplete="off"></div>
+      <div><label for="vp-provider">{{vpn.art}}</label><select id="vp-provider"><option value="proton">{{vpn.proton_nat_pmp}}</option>
+        <option value="fixed">{{vpn.fester_port_z_b_airvpn}}</option></select></div>
+      <div id="vp-ports-wrap"><label for="vp-ports">{{vpn.freigegebene_ports}}</label><input type="text" id="vp-ports" placeholder="43210" spellcheck="false" autocomplete="off"></div>
+    </div>
+    <label for="vp-file">{{vpn.wireguard_datei_wg_conf}}</label>
+    <input type="file" id="vp-file" accept=".conf,text/plain">
+    <label for="vp-conf">{{wizard.oder_inhalt_einfugen}} <span class="muted small" id="vp-conf-state"></span></label>
+    <textarea id="vp-conf" rows="5" spellcheck="false" autocomplete="off"></textarea>
+    <label class="inline"><input type="checkbox" id="vp-enabled" checked> {{vpn.eingeschaltet_fur_failover_verwenden}}</label>
+    <details class="help"><summary>{{ui.erweitert}}</summary>
+      <div class="cols">
+        <div><label for="vp-mtu-mode">{{vpn.mtu_des_tunnels}}</label><select id="vp-mtu-mode"><option value="set">{{vpn.fester_wert}}</option>
+          <option value="conf">{{vpn.aus_konfiguration_ubernehmen}}</option></select></div>
+        <div id="vp-mtu-wrap"><label for="vp-mtu">{{vpn.mtu_1280_bis_1500}}</label><input type="text" id="vp-mtu" inputmode="numeric" value="1340" placeholder="1340" autocomplete="off"></div>
+      </div>
+      <p>{{vpn.1340_standard_passt_auch_wenn}} <span id="vp-mtu-conf"></span></p>
+    </details>
+    <div class="actions"><button class="primary" type="button" id="vp-save">{{vpn.profil_speichern}}</button>
+      <button type="button" id="vp-cancel">{{ui.abbrechen}}</button></div>
+    <div id="vp-msg"></div>
+  </div>
+  <div class="card">
+    <h2>{{vpn.failover}}</h2>
+    <details class="help"><summary>{{ui.hilfe}}</summary><p>{{vpn.rotation_hint}}</p></details>
+    <div class="cols">
+      <div><label for="fo-rotate">{{vpn.wann_wechseln}}</label><select id="fo-rotate"><option value="off">{{vpn.rotation_aus}}</option><option value="daily">{{vpn.rotation_taglich}}</option><option value="hours">{{vpn.rotation_stunden}}</option></select></div>
+      <div id="fo-at-wrap"><label for="fo-at">{{vpn.rotation_uhrzeit}}</label><input type="text" id="fo-at" placeholder="04:00"></div>
+      <div id="fo-hours-wrap"><label for="fo-hours">{{vpn.rotation_alle_stunden}}</label><input type="text" id="fo-hours" inputmode="numeric" placeholder="24"></div>
+    </div>
+    <p class="hint" id="fo-next"></p>
+    <details class="help"><summary>{{ui.erweitert}}</summary>
+      <div class="cols">
+        <div><label for="fo-fails">{{vpn.wechsel_nach_fehlprufungen_alle_30}}</label><input type="text" id="fo-fails" inputmode="numeric" placeholder="2"></div>
+        <div><label for="fo-hold">{{vpn.wartezeit_vor_ruckwechsel_minuten}}</label><input type="text" id="fo-hold" inputmode="numeric" placeholder="10"></div>
+      </div>
+    </details>
+    <label class="inline"><input type="checkbox" id="fo-standby" checked> {{vpn.reserve_tunnel}}</label>
+    <p class="hint">{{vpn.reserve_tunnel_hint}}</p>
+    <div class="actions"><button class="primary" type="button" id="fo-save">{{vpn.failover_speichern}}</button></div>
+  </div>
+  <div class="card">
+    <h2><span class="dot" id="be-dot"></span>{{status.backend}}</h2>
+    <p class="muted">{{wizard.adresse_deines_reverse_proxys_z}}</p>
+    <label for="be-addr">{{wizard.ip_port}}</label>
+    <input type="text" id="be-addr" placeholder="192.168.1.10:443" spellcheck="false" autocomplete="off">
+    <label class="inline"><input type="checkbox" id="be-all" checked> {{conn.alle_privaten_netze}}</label>
+    <div id="be-own" class="hidden">
+      <label for="be-lan">{{wizard.lan_netze_eines_pro_zeile}}</label>
+      <textarea id="be-lan" rows="3" spellcheck="false" placeholder="192.168.1.0/24"></textarea>
+    </div>
+    <div class="hint">{{wizard.netze_im_heimnetz_die_uber}}</div>
+    <div class="actions"><button class="primary" type="button" id="be-save">{{wizard.speichern_und_testen}}</button></div>
+    <div id="be-msg"></div>
+  </div>
+  <div class="card">
+    <h2>{{vpn.lan_eingang}}</h2>
+    <details class="help"><summary>{{ui.hilfe}}</summary><p>{{vpn.gerate_im_lan_und_im}} <code>*.&lt;name&gt;.myaddr.tools</code> {{vpn.auf_diese_lan_ip_zeigen}}</p></details>
+    <label class="inline"><input type="checkbox" id="le-on" checked> {{vpn.lan_eingang_eingeschaltet}}</label>
+    <dl id="s-lan"></dl>
+    <div id="le-msg"></div>
+  </div>
+  <div class="card">
+    <h2>{{vpn.ereignisse}}</h2>
+    <div class="small" id="vp-events"></div>
+  </div>
+</section>
+
+
+<!-- myaddr names: DDNS -->
+<section id="v-myaddr" class="hidden">
+  <div class="phead"><h1>{{ui.namen}}</h1></div>
+  <p class="lead">{{lead.myaddr}}</p>
+  <div class="card">
+    <h2><span class="dot" id="c-ddns-dot"></span>{{ui.stand}}</h2>
+    <div id="c-ddns"></div>
+    <div class="actions"><button type="button" data-action="ddns-update">{{myaddr.jetzt_aktualisieren}}</button></div>
+  </div>
+  <div class="card">
+    <h2>{{myaddr.namen_liste}}</h2>
+    <details class="help"><summary>{{ui.hilfe}}</summary><p>{{myaddr.kostenloser_name_bei}} <a href="https://myaddr.tools" target="_blank" rel="noopener noreferrer">{{myaddr.myaddr_tools}}</a>
+      {{myaddr.dort_name_reservieren_den_schlussel}} <b>{{myaddr.die_offentliche_ip_deines_anschlusses}}</b></p>
+      <p>{{myaddr.namen_liste_hint}}</p><p id="m-mode-hint">{{myaddr.ist_das_vpn_aus_oder}}</p></details>
+    <div class="tablewrap"><table><thead><tr><th>{{vpn.name}}</th><th>{{myaddr.domain}}</th><th>{{myaddr.verwendung}}</th>
+      <th>{{myaddr.ip_eingang}}</th><th>{{myaddr.vpn_profil}}</th><th>{{myaddr.schlussel}}</th><th>{{myaddr.zertifikat}}</th><th>{{myaddr.stand}}</th><th></th></tr></thead>
+      <tbody id="mn-rows"></tbody></table></div>
+    <h3>{{myaddr.hauptname_einstellungen}}</h3>
+    <div class="cols">
+      <div><label for="m-mode">{{myaddr.ip_fur_den_a_eintrag}}</label><select id="m-mode">
+        <option value="vpn">{{myaddr.vpn_exit_ip_standard}}</option><option value="manual">{{myaddr.manuell_festgelegte_ip}}</option></select></div>
+      <div id="m-fallback-wrap"><label for="m-fallback">{{myaddr.ersatz_ip_optional}}</label>
+        <input type="text" id="m-fallback" placeholder="{{myaddr.z_b_ip_des_hosters}}" spellcheck="false" autocomplete="off"></div>
+      <div id="m-manual-wrap" class="hidden"><label for="m-manual">{{myaddr.manuelle_ip_ipv4_oder_ipv6}}</label>
+        <input type="text" id="m-manual" placeholder="203.0.113.5" spellcheck="false" autocomplete="off"></div>
+    </div>
+    <label class="inline"><input type="checkbox" id="m-ddns" checked> {{myaddr.ddns_a_eintrag_automatisch_aktualisieren}}</label>
+    <div class="actions"><button class="primary" type="button" id="mn-save">{{myaddr.namen_speichern}}</button>
+      <button type="button" id="mn-add">{{myaddr.name_hinzufugen}}</button></div>
+    <div id="mn-msg"></div>
+  </div>
+</section>
+
+<!-- Certificate: Let's Encrypt, downloads, delivery -->
+<section id="v-cert" class="hidden">
+  <h2 class="sec">{{ui.zertifikat}}</h2>
+  <p class="lead">{{lead.cert}}</p>
+  <div class="card">
+    <h2><span class="dot" id="c-cert-dot"></span>{{ui.stand}}</h2>
+    <dl id="c-cert"></dl>
+    <div class="actions"><button type="button" id="c-issue">{{cert.zertifikat_jetzt_holen}}</button></div>
+  </div>
+  <div class="card">
+    <h2>{{cert.let_s_encrypt_zertifikat}}</h2>
+    <details class="help"><summary>{{ui.hilfe}}</summary><p>{{cert.wildcard_zertifikat_fur}} <b id="c-names">{{cert.name_myaddr_tools_und_name}}</b>
+      {{cert.per_dns_01_uber_myaddr}} <i>{{cert.staging}}</i> {{cert.testen_nicht_vertrauenswurdig_aber_ohne}}</p></details>
+    <div class="choice">
+      <label><input type="radio" name="c-env" value="staging" checked> {{cert.staging_test}}</label>
+      <label><input type="radio" name="c-env" value="production"> {{cert.produktion}}</label>
+    </div>
+    <div class="cols">
+      <div><label for="c-email">{{cert.e_mail_fur_let_s}}</label><input type="text" id="c-email" autocomplete="off" spellcheck="false"></div>
+      <div><label for="c-delay">{{cert.wartezeit_dns_sekunden}}</label><input type="text" id="c-delay" value="60" inputmode="numeric"></div>
+    </div>
+    <label class="inline"><input type="checkbox" id="c-auto" checked> {{cert.automatisch_erneuern}}</label>
+    <label class="inline"><input type="checkbox" id="c-tos"> {{cert.ich_akzeptiere_die}}
+      <a href="https://letsencrypt.org/repository/" target="_blank" rel="noopener noreferrer">{{cert.nutzungsbedingungen_von_let_s_encrypt}}</a></label>
+    <div class="actions"><button class="primary" type="button" id="c-save">{{myaddr.speichern}}</button></div>
+    <div id="c-msg"></div>
+  </div>
+  <div class="card">
+    <h2><span class="dot" id="c-del-dot"></span>{{cert.automatisch_ubertragen}}</h2>
+    <details class="help"><summary>{{ui.hilfe}}</summary><p>{{cert.nach_jedem_neuen_zertifikat_die}}</p><p>{{cert.schreibt_name_myaddr_tools_pem}}</p></details>
+    <dl id="c-del"></dl>
+    <h3>{{cert.nginx_proxy_manager}}</h3>
+    <div class="cols">
+      <div><label for="n-url">{{cert.npm_adresse_admin_port}}</label><input type="text" id="n-url" placeholder="{{cert.http_192_168_1_10}}" spellcheck="false" autocomplete="off"></div>
+      <div><label for="n-name">{{cert.name_des_zertifikats_in_npm}}</label><input type="text" id="n-name" placeholder="{{cert.pf_agent_name_myaddr_tools}}" spellcheck="false" autocomplete="off"></div>
+      <div><label for="n-user">{{cert.benutzer_e_mail_eigener_benutzer}}</label><input type="text" id="n-user" spellcheck="false" autocomplete="off"></div>
+      <div><label for="n-pass">{{login.passwort}} <span class="muted small" id="n-pass-state"></span></label><input type="password" id="n-pass" placeholder="{{myaddr.leer_lassen_unverandert}}" autocomplete="off"></div>
+    </div>
+    <h3>{{cert.zoraxy}}</h3>
+    <label for="z-dir">{{cert.ordner_im_container_eingebundenes}} <code>conf/certs</code> {{cert.von_zoraxy}}</label>
+    <input type="text" id="z-dir" placeholder="{{cert.zoraxy_certs}}" spellcheck="false" autocomplete="off">
+    <div class="actions"><button class="primary" type="button" id="d-save">{{myaddr.speichern}}</button>
+      <button type="button" data-action="cert-deliver">{{cert.jetzt_ubertragen}}</button></div>
+    <div id="d-msg"></div>
+  </div>
+  <div class="card">
+    <h2>{{cert.herunterladen}}</h2>
+    <div class="actions" id="c-dl" style="border:0;padding-top:0;margin-top:0">
+      <a href="/api/cert/download/fullchain.pem" download>{{cert.fullchain_pem}}</a>
+      <a href="/api/cert/download/privkey.pem" download>{{cert.privkey_pem}}</a>
+      <a href="/api/cert/download/cert.zip" download>{{cert.alles_als_zip}}</a>
+    </div>
+    <p class="hint" id="c-dl-names"></p>
+    <h3>{{cert.abruf_per_skript_token}}</h3>
+    <details class="help"><summary>{{ui.hilfe}}</summary><p>{{cert.fur_andere_gerate_im_lan}} <code>GET /api/cert/download/fullchain.pem</code> {{cert.auch}}
+      <code>privkey.pem</code>, <code>cert.zip</code>{{cert.mit}} <code>Authorization: Bearer &lt;Token&gt;</code>{{cert.skript}} <code>docs/pull-cert.sh</code>{{cert.der_token_wird_nur_einmal}}</p></details>
+    <div class="actions"><button type="button" id="t-new">{{cert.neuen_token_erzeugen}}</button>
+      <button type="button" id="t-drop">{{cert.token_widerrufen}}</button><span class="muted small" id="t-state"></span></div>
+    <div id="t-msg"></div>
+  </div>
+</section>
+
+
+<!-- Redirect host -->
+<section id="v-redirect" class="hidden">
+  <div class="phead"><h1>{{ui.weiterleitung}}</h1></div>
+  <p class="lead">{{lead.rewrite}}</p>
+  <div class="card">
+    <h2><span class="dot" id="r-dot"></span>{{ui.stand}}</h2>
+    <dl id="r-state"></dl>
+    <details class="help"><summary>{{redirect.letzte_ausgabe}}</summary><pre class="log" id="r-out"></pre></details>
+    <div class="actions"><button type="button" data-action="redirect-run">{{redirect.jetzt_ausfuhren}}</button></div>
+  </div>
+  <div class="card">
+    <h2>{{redirect.redirect_host}}</h2>
+    <details class="help"><summary>{{ui.hilfe}}</summary><p>{{redirect.eine_feste_eingangs_adresse_z}} <code>start.example.ch</code>{{redirect.leitet_mit_302_auf_das}}
+      <code>https://&lt;sub&gt;.&lt;name&gt;.myaddr.tools:&lt;VPN-Port&gt;</code> {{redirect.weiter_myaddr_tools_kann_selbst}}</p></details>
+    <div class="choice">
+      <label><input type="radio" name="r-prov" value="" checked> {{redirect.aus}}</label>
+      <label><input type="radio" name="r-prov" value="cloudflare"> {{redirect.cloudflare}}</label>
+      <label><input type="radio" name="r-prov" value="script"> {{redirect.skript_z_b_plesk_per}}</label>
+    </div>
+    <div id="r-cf">
+      <h3>{{redirect.cloudflare}}</h3>
+      <div class="cols">
+        <div><label for="r-zone">{{redirect.zone_zone_id_oder_domain}}</label><input type="text" id="r-zone" spellcheck="false" autocomplete="off"></div>
+        <div><label for="r-token">{{redirect.api_token}} <span class="muted small" id="r-token-state"></span></label><input type="password" id="r-token" placeholder="{{myaddr.leer_lassen_unverandert}}" autocomplete="off"></div>
+      </div>
+      <div class="hint">{{redirect.token_mit_der_berechtigung_zone}}</div>
+    </div>
+    <details class="help"><summary>{{ui.erweitert}}</summary>
+      <div class="cols">
+        <div><label for="r-status">{{redirect.statuscode}}</label><select id="r-status"><option>302</option><option>307</option><option>301</option><option>308</option></select></div>
+        <div><label for="r-port">{{redirect.fester_port_nur_ohne_vpn}}</label><input type="text" id="r-port" inputmode="numeric" placeholder="443"></div>
+      </div>
+    </details>
+    <div class="actions"><button class="primary" type="button" id="r-save">{{redirect.speichern_und_ausfuhren}}</button></div>
+    <div id="r-msg"></div>
+  </div>
+  <div class="card">
+    <h2>{{redirect.weitere_regeln}}</h2>
+    <details class="help"><summary>{{ui.hilfe}}</summary><p>{{redirect.weitere_regeln_hint}}</p></details>
+    <div class="tablewrap"><table><thead><tr><th>{{redirect.regel_eingang}}</th><th>{{redirect.regel_ziel}}</th><th>{{redirect.regel_ziel_name}}</th><th>{{redirect.regel_ergebnis}}</th><th></th></tr></thead>
+      <tbody id="r-rules"></tbody></table></div>
+    <div class="actions"><button class="primary" type="button" id="r-save2">{{redirect.speichern_und_ausfuhren}}</button>
+      <button type="button" id="r-rule-add">{{redirect.regel_hinzufugen}}</button></div>
+  </div>
+  <div class="card" id="r-script">
+    <h2>{{redirect.skript}}</h2>
+    <details class="help"><summary>{{ui.hilfe}}</summary><p>{{redirect.lauft_mit_bin_sh_60}}</p></details>
+    <label for="g-kind">{{gen.art}}</label>
+    <select id="g-kind"><option value="htaccess">{{gen.htaccess}}</option><option value="php">{{gen.php}}</option><option value="">{{gen.eigenes}}</option></select>
+    <div id="g-fields">
+      <div class="cols">
+        <div><label for="g-user">{{gen.user}}</label><input type="text" id="g-user" placeholder="webuser" spellcheck="false" autocomplete="off"></div>
+        <div><label for="g-host">{{gen.host}}</label><input type="text" id="g-host" placeholder="server.example.ch" spellcheck="false" autocomplete="off"></div>
+        <div><label for="g-port">{{gen.port}}</label><input type="text" id="g-port" inputmode="numeric" placeholder="22"></div>
+        <div><label for="g-root">{{gen.root}}</label><input type="text" id="g-root" placeholder="httpdocs" spellcheck="false" autocomplete="off"></div>
+      </div>
+      <p class="hint">{{gen.hinweis}}</p>
+    </div>
+    <label for="r-text" id="g-prev-label">{{gen.vorschau}}</label>
+    <textarea id="r-text" rows="14" spellcheck="false" autocomplete="off"></textarea>
+    <div id="g-msg"></div>
+    <div class="actions"><button class="primary" type="button" id="r-save3">{{redirect.speichern_und_ausfuhren}}</button>
+      <button type="button" id="g-test">{{gen.testen}}</button>
+      <button type="button" id="g-own">{{gen.ubernehmen}}</button>
+      <span id="g-ex"><button type="button" data-example="plesk-htaccess">{{redirect.beispiel_htaccess_per_ssh}}</button>
+      <button type="button" data-example="php-index">{{redirect.beispiel_index_php_per_ssh}}</button></span></div>
+    <h3>{{redirect.ssh_schlussel_fur_das_skript}}</h3>
+    <pre class="log" id="r-pub">-</pre>
+    <div class="hint">{{redirect.offentlichen_schlussel_beim_hoster_eintragen}}</div>
+    <label for="r-priv">{{redirect.oder_privaten_schlussel_hochladen_ohne}}</label>
+    <textarea id="r-priv" rows="3" spellcheck="false" autocomplete="off" placeholder="{{redirect.begin_openssh_private_key}}"></textarea>
+    <div class="actions"><button type="button" id="r-gen">{{redirect.neuen_schlussel_erzeugen}}</button>
+      <button type="button" id="r-up">{{redirect.schlussel_hochladen}}</button></div>
+    <div id="r-key-msg"></div>
+  </div>
+</section>
+
+<!-- Settings (per browser) -->
+<section id="v-settings" class="hidden">
+  <div class="phead"><h1>{{ui.system}}</h1></div>
+  <p class="lead">{{lead.system}}</p>
+  <div class="card" id="sp-card">
+    <h2>{{sys.passwort}}</h2>
+    <div class="cols">
+      <div><label for="sp0">{{wizard.bisheriges_passwort}}</label><input type="password" id="sp0" autocomplete="current-password"></div>
+      <div><label for="sp1">{{wizard.neues_passwort}}</label><input type="password" id="sp1" autocomplete="new-password" minlength="8"></div>
+      <div><label for="sp2">{{wizard.passwort_wiederholen}}</label><input type="password" id="sp2" autocomplete="new-password" minlength="8"></div>
+    </div>
+    <p class="hint">{{wizard.mindestens_8_zeichen_das_passwort}}</p>
+    <div class="actions"><button class="primary" type="button" id="sp-save">{{sys.passwort_andern}}</button></div>
+    <div id="sp-msg"></div>
+  </div>
+  <div class="card">
+    <h2>{{settings.anzeige}}</h2>
+    <p class="hint">{{settings.gilt_fur_diesen_browser}}</p>
+    <div class="cols">
+      <div><label for="set-lang">{{settings.sprache}}</label>
+        <select id="set-lang"><option value="auto">{{settings.auto_browser}}</option></select></div>
+      <div><label for="theme">{{settings.darstellung}}</label>
+        <select id="theme"><option value="auto">{{settings.auto}}</option><option value="light">{{settings.hell}}</option><option value="dark">{{settings.dunkel}}</option></select></div>
+    </div>
+  </div>
+</section>
+<!-- Push notifications -->
+<section id="v-push" class="hidden">
+  <h2 class="sec">{{ui.push}}</h2>
+  <p class="lead">{{lead.push}}</p>
+  <div class="card">
+    <h2><span class="dot" id="p-dot"></span>{{ui.stand}}</h2>
+    <dl id="p-state"></dl>
+    <div class="actions"><button type="button" id="p-test">{{push.test_senden}}</button></div>
+  </div>
+  <div class="card">
+    <h2>{{push.push_benachrichtigungen}}</h2>
+    <details class="help"><summary>{{ui.hilfe}}</summary><p>{{push.meldungen_bei_einem_wechsel_des}}</p>
+      <p>{{push.direkt}}</p>
+      <p>{{push.ein_feld_leeren_und_speichern}}</p></details>
+    <h3>{{push.gotify}}</h3>
+    <div class="cols">
+      <div><label for="pg-url">{{push.gotify_adresse}}</label><input type="text" id="pg-url" placeholder="{{push.http_192_168_1_20}}" spellcheck="false" autocomplete="off"></div>
+      <div><label for="pg-token">{{push.app_token}} <span class="muted small" id="pg-token-state"></span></label><input type="password" id="pg-token" placeholder="{{myaddr.leer_lassen_unverandert}}" autocomplete="off"></div>
+    </div>
+    <h3>{{push.ntfy}}</h3>
+    <div class="cols">
+      <div><label for="pn-url">{{push.ntfy_server}}</label><input type="text" id="pn-url" placeholder="{{push.http_192_168_1_20_2}}" spellcheck="false" autocomplete="off"></div>
+      <div><label for="pn-topic">{{push.thema}}</label><input type="text" id="pn-topic" placeholder="{{ui.pf_agent}}" spellcheck="false" autocomplete="off"></div>
+      <div><label for="pn-token">{{push.zugriffstoken_optional}} <span class="muted small" id="pn-token-state"></span></label><input type="password" id="pn-token" placeholder="{{myaddr.leer_lassen_unverandert}}" autocomplete="off"></div>
+    </div>
+    <div class="cols">
+      <div><label for="p-rem">{{push.erinnerung_solange_alle_vpns_ausgefallen}}</label>
+        <input type="text" id="p-rem" inputmode="numeric" placeholder="30"></div>
+    </div>
+    <div class="actions"><button class="primary" type="button" id="p-save">{{myaddr.speichern}}</button></div>
+    <div id="p-msg"></div>
+  </div>
+</section>
+<section id="v-log" class="hidden">
+  <h2 class="sec">{{ui.log}}</h2>
+  <p class="lead">{{lead.log}}</p>
+  <div class="card">
+    <label class="inline"><input type="checkbox" id="log-follow" checked> {{log.auto_scroll}}</label>
+    <pre class="log" id="log"></pre>
+  </div>
+</section>
+
+</main>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const S = { session: null, status: null, step: 1, view: "", timer: null };
+
+function esc(v) {
+  return String(v == null ? "" : v).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// ---- texts (lang/*.json): "auto" follows the browser, German fills missing keys ------------------
+const I18N = (() => {
+  let pref = "auto";
+  try { pref = localStorage.getItem("pf-lang") || "auto"; } catch (e) { /* storage blocked */ }
+  let lang = pref !== "auto" && PF_I18N[pref] ? pref : "";
+  if (!lang) {
+    for (const l of (navigator.languages || [navigator.language || ""])) {
+      const b = String(l).slice(0, 2).toLowerCase();
+      if (PF_I18N[b]) { lang = b; break; }
+    }
+  }
+  if (!lang) lang = "de";
+  return { pref, lang, dict: Object.assign({}, PF_I18N.de || {}, PF_I18N[lang] || {}) };
+})();
+function tx(key) { const v = I18N.dict[key]; return v == null ? key : v; }
+document.documentElement.lang = I18N.lang === "de" ? "de-CH" : I18N.lang;
+["header", "main"].forEach((tag) => {
+  const el = document.querySelector(tag);
+  el.innerHTML = el.innerHTML.replace(/\{\{([\w.]+)\}\}/g, (m, k) => esc(tx(k)));
+});
+
+async function api(method, path, body) {
+  const opt = { method, credentials: "same-origin", headers: {} };
+  if (body !== undefined) { opt.headers["Content-Type"] = "application/json"; opt.body = JSON.stringify(body); }
+  let res, data = {};
+  try { res = await fetch(path, opt); } catch (e) { throw new Error(tx("js.agent_nicht_erreichbar")); }
+  try { data = await res.json(); } catch (e) { data = {}; }
+  if (res.status === 401 && path !== "/api/login") { showLogin(); }
+  if (!res.ok) { const err = new Error(data.error || ("HTTP " + res.status)); err.status = res.status; throw err; }
+  return data;
+}
+
+function msg(el, kind, html) { $(el).innerHTML = html ? '<div class="msg ' + kind + '">' + html + "</div>" : ""; }
+
+async function busy(btn, fn) {
+  const label = btn.textContent;
+  btn.disabled = true; btn.textContent = tx("js.bitte_warten");
+  try { await fn(); } finally { btn.disabled = false; btn.textContent = label; }
+}
+
+function age(ts) {
+  if (!ts) return tx("js.nie");
+  const s = Math.max(0, Math.floor(Date.now() / 1000 - ts));
+  if (s < 90) return tx("js.vor") + s + " s" + tx("js.vor_nach");
+  if (s < 5400) return tx("js.vor") + Math.round(s / 60) + tx("js.min") + tx("js.vor_nach");
+  if (s < 172800) return tx("js.vor") + Math.round(s / 3600) + " h" + tx("js.vor_nach");
+  return tx("js.vor") + Math.round(s / 86400) + tx("js.tagen") + tx("js.vor_nach");
+}
+function bytes(n) {
+  if (!n) return "0 B";
+  const u = ["B", "KiB", "MiB", "GiB", "TiB"]; let i = 0;
+  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+  return n.toFixed(i ? 1 : 0) + " " + u[i];
+}
+function dl(rows) {
+  return rows.filter((r) => r).map((r) => "<dt>" + esc(r[0]) + "</dt><dd>" + (r[2] ? r[1] : esc(r[1])) + "</dd>").join("");
+}
+function dot(id, kind) { $(id).className = "dot " + (kind || ""); }
+function lines(text) { return String(text || "").split(/[\s,]+/).map((s) => s.trim()).filter((s) => s); }
+const DEFAULT_LAN = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]; // all private networks
+
+function readFile(input, target) {
+  input.addEventListener("change", () => {
+    const f = input.files && input.files[0];
+    if (!f) return;
+    if (f.size > 12 * 1024) { alert(tx("js.die_datei_ist_zu_gross")); input.value = ""; return; }
+    const r = new FileReader();
+    r.onload = () => { $(target).value = String(r.result || ""); };
+    r.readAsText(f);
+  });
+}
+
+// ---- views ---------------------------------------------------------
+// A view (nav entry) shows one or more sections.
+const SECTIONS = { login: ["login"], wizard: ["wizard"], status: ["status", "log"], vpn: ["vpn"], myaddr: ["myaddr", "cert"],
+  redirect: ["redirect"], system: ["settings", "push", "log"] };
+const ALL_SECTIONS = [].concat(...Object.values(SECTIONS));
+const HASH = { vpn: "#verbindung", myaddr: "#namen", redirect: "#weiterleitung", system: "#system" };
+// links from before 0.15.0
+const OLD_HASH = { "#vpn": "vpn", "#myaddr": "myaddr", "#zertifikat": "myaddr", "#rewrite": "redirect", "#redirect": "redirect",
+  "#push": "system", "#einstellungen": "system", "#log": "system" };
+const REFRESH = { status: refresh, vpn: refresh, myaddr: refreshCert, redirect: refreshRedirect,
+  system: () => { refresh(); refreshPush(); } };
+function viewOfHash(h) {
+  return OLD_HASH[h] || Object.keys(HASH).find((v) => HASH[v] === h) || "status";
+}
+// 0.23.0: the log stays at its end unless the switch is off (owner)
+function followLog() { const el = $("log"); if (el && $("log-follow").checked) el.scrollTop = el.scrollHeight; }
+function show(view) {
+  S.view = view;
+  ALL_SECTIONS.forEach((v) => $("v-" + v).classList.toggle("hidden", !SECTIONS[view].includes(v)));
+  const path = "/" + (HASH[view] || "");
+  if (view !== "login" && location.pathname + location.hash !== path) history.replaceState(null, "", path);
+  const logged = view !== "login" && S.session && S.session.password_set;
+  const done = S.status && S.status.setup.done;
+  $("btn-logout").classList.toggle("hidden", !logged);
+  $("btn-wizard").classList.toggle("hidden", !(logged && view !== "wizard"));
+  $("nav").classList.toggle("hidden", !logged);
+  document.querySelectorAll("#nav button").forEach((b) => {
+    b.classList.toggle("hidden", !done && b.dataset.view !== "system");
+    b.classList.toggle("active", b.dataset.view === view);
+  });
+  clearInterval(S.timer); S.timer = null;
+  if (view === "myaddr") S.certFilled = false;
+  if (view === "redirect") S.redirFilled = false;
+  if (view === "system") S.pushFilled = false;
+  if (view === "vpn") S.beFilled = false;
+  const fn = REFRESH[view];
+  if (fn) { fn(); S.timer = setInterval(fn, 5000); }
+  setTimeout(followLog, 0);
+}
+function showLogin() { show("login"); setTimeout(() => $("login-pw").focus(), 0); }
+
+async function boot() {
+  try { S.session = await api("GET", "/api/session"); }
+  catch (e) { document.querySelector("main").innerHTML = '<div class="card msg err">' + esc(e.message) + "</div>"; return; }
+  $("ver").textContent = "v" + S.session.version;
+  if (!S.session.password_set) { gotoStep(1); show("wizard"); return; }
+  if (!S.session.logged_in) { showLogin(); return; }
+  await loadStatus();
+  if (S.status.setup.done) show(viewOfHash(location.hash));
+  else { gotoStep(firstOpenStep()); show("wizard"); }
+}
+
+async function loadStatus() { S.status = await api("GET", "/api/status"); return S.status; }
+
+function firstOpenStep() {
+  const s = S.status ? S.status.setup : { password: false };
+  if (!s.password) return 1;
+  if (!s.proton) return 2;
+  if (!s.backend) return 3;
+  return 4;
+}
+
+function gotoStep(n) {
+  S.step = n;
+  document.querySelectorAll(".step").forEach((el) => el.classList.toggle("hidden", Number(el.dataset.step) !== n));
+  const s = S.status ? S.status.setup : { password: S.session && S.session.password_set };
+  const done = { 1: s.password, 2: s.proton, 3: s.backend, 4: s.done };
+  document.querySelectorAll("#steps li").forEach((li) => {
+    const k = Number(li.dataset.step);
+    li.className = (k === n ? "cur" : (done[k] ? "done" : ""));
+  });
+  prefillStep(n);
+}
+
+function prefillStep(n) {
+  const st = S.status;
+  if (n === 1) {
+    const set = S.session && S.session.password_set;
+    $("pw-info").textContent = set ? tx("js.das_passwort_ist_gesetzt_du")
+      : tx("wizard.mindestens_8_zeichen_das_passwort");
+    $("pw-skip").classList.toggle("hidden", !set);
+    $("pw-old-wrap").classList.toggle("hidden", !set);
+  }
+  if (n === 2 && st) {
+    if (st.setup.proton && !st.proton.enabled) document.querySelector('input[name=proton][value=off]').checked = true;
+    else if (st.proton.provider === "fixed") document.querySelector('input[name=proton][value=fixed]').checked = true;
+    if (!$("proton-ports").value) $("proton-ports").value = (st.proton.ports || []).join(", ");
+    $("proton-stored").textContent = st.proton.configured
+      ? tx("js.gespeichert_server") + (st.proton.server || "?") + " (" + (st.proton.config_endpoint || "") + tx("js.ohne_neue_datei_wird_die") : "";
+    $("proton-next").classList.toggle("hidden", !st.setup.proton);
+    toggleProton();
+  }
+  if (n === 3 && st) {
+    if (!$("backend").value) $("backend").value = st.backend.addr || "";
+    if (!$("lan").value) {
+      const nets = st.backend.lan_nets || [];
+      $("lan").value = (nets.length ? nets : DEFAULT_LAN).join("\n");
+    }
+    $("backend-next").classList.toggle("hidden", !st.setup.backend);
+  }
+  if (n === 4 && st) { renderSummary(); }
+}
+
+function toggleProton() {
+  const v = document.querySelector("input[name=proton]:checked").value;
+  $("proton-on").classList.toggle("hidden", v === "off");
+  $("proton-ports-wrap").classList.toggle("hidden", v !== "fixed");
+}
+
+function vpnPorts() {
+  const p = (S.status && S.status.proton) || {};
+  const ports = p.provider === "fixed" ? (p.ports || []) : (p.port ? [p.port] : []);
+  return ports.join(", ");
+}
+
+function renderProtonTest(r) {
+  const t = r.test || r;
+  const s = r.summary || {};
+  const rows = [
+    [tx("js.handshake"), t.handshake ? age(t.handshake) : tx("js.keiner")],
+    [tx("vpn.server"), s.server || t.server || "-"],
+    [tx("js.endpoint"), t.endpoint || s.endpoint || "-"],
+    [tx("js.exit_ip"), t.exit_ip || tx("js.unbekannt")],
+    [tx("js.port"), vpnPorts() || tx("js.noch_unbekannt")],
+    s.removed && s.removed.length ? [tx("js.entfernt"), s.removed.join(", ")] : null,
+    s.natpmp_hint === false ? [tx("js.hinweis"), tx("js.diese_datei_wurde_ohne_nat")] : null,
+  ];
+  let html = (t.ok ? tx("js.b_vpn_verbunden_b") : tx("js.b_vpn_test_fehlgeschlagen_b") + esc(t.error || "")) + "<dl>" + dl(rows) + "</dl>";
+  if (t.warning) html += '<p class="small">' + esc(t.warning) + "</p>";
+  if (!t.ok) html += tx("js.p_class_small_die_konfiguration");
+  return { kind: t.ok ? (t.warning ? "warn" : "ok") : "err", html };
+}
+
+function renderBackendTest(t) {
+  const rows = [["TCP", t.tcp ? "ok" : tx("js.nicht_erreichbar")], ["TLS", t.tls ? "ok" : (t.tcp ? tx("js.handshake_fehlgeschlagen") : "-")],
+    [tx("js.latenz"), t.latency_ms ? t.latency_ms + tx("js.ms") : "-"], t.sni ? ["SNI", t.sni] : null];
+  let html = (t.tls ? tx("js.b_backend_erreichbar_b") : (t.tcp ? tx("js.b_backend_antwortet_aber_tls") : tx("js.b_backend_nicht_erreichbar_b")));
+  if (t.error) html += " " + esc(t.error);
+  html += "<dl>" + dl(rows) + "</dl>";
+  return { kind: t.tls ? "ok" : (t.tcp ? "warn" : "err"), html };
+}
+
+// 0.23.0: active tunnel and standby show the same rows (owner)
+function mtuText(t) { return t.mtu ? String(t.mtu) + (t.mtu_setting === "conf" ? tx("js.aus_konfiguration") : "") : t.mtu_effective ? String(t.mtu_effective) : "-"; }
+function profPos(p, pid) {
+  const all = p.profiles || [], i = all.findIndex((x) => x.id === pid);
+  return all.length > 1 && i >= 0 ? " (" + (i + 1) + tx("js.von") + all.length + ")" : "";
+}
+function standbyBlock(sb, nameOf, p) {
+  if (!sb || !sb.enabled) return "";
+  const head = "<h3>" + esc(tx("js.reserve_gross")) + "</h3>";
+  if (!sb.profile) return head + "<dl>" + dl([[tx("vpn.status"), tx("js.keine_reserve")]]) + "</dl>";
+  const name = nameOf(sb.profile);
+  return head + "<dl>" + dl([[tx("js.profil"), (sb.profile_name || "-") + profPos(p, sb.profile)],
+    [tx("vpn.status"), sb.ready ? tx("js.bereit") : (sb.reason || sb.error || tx("js.wird_aufgebaut"))],
+    [tx("vpn.art"), sb.provider === "fixed" ? tx("js.fester_port") : tx("vpn.proton_nat_pmp")],
+    [tx("vpn.server"), sb.server || "-"], [tx("js.schnittstelle"), sb.iface || "-"], [tx("js.exit_ip"), sb.exit_ip || tx("js.unbekannt")],
+    sb.provider === "fixed" ? [tx("js.ports"), (sb.ports || []).join(", ") + tx("js.fest_tcp")]
+      : [tx("js.port"), sb.port ? String(sb.port) + tx("js.nat_pmp_tcp") : tx("js.unbekannt")],
+    name && sb.port ? [tx("js.erreichbar"), "https://" + name + ":" + sb.port] : null,
+    [tx("js.handshake"), sb.handshake_age != null ? age(Math.floor(Date.now() / 1000) - sb.handshake_age) : tx("js.tunnel_lauft_nicht")],
+    [tx("js.endpoint"), sb.endpoint || sb.config_endpoint || "-"],
+    [tx("js.transfer"), tx("js.rx") + bytes(sb.rx) + tx("js.tx") + bytes(sb.tx)],
+    ["MTU", mtuText(sb)], sb.error && sb.ready ? [tx("js.fehler"), sb.error] : null]) + "</dl>";
+}
+function standbyRow(sb) {
+  if (!sb || !sb.enabled || !sb.profile) return null;
+  const where = [sb.iface, sb.ports && sb.ports.length ? tx("js.port") + " " + sb.ports.join(", ") : "", sb.exit_ip].filter((x) => x).join(", ");
+  return [tx("js.reserve_gross"), sb.profile_name + " (" + where + ") - " + (sb.ready ? tx("js.bereit") : (sb.reason || sb.error || tx("js.wird_aufgebaut")))];
+}
+
+function renderSummary() {
+  const st = S.status;
+  $("summary").innerHTML = dl([
+    ["VPN", st.proton.enabled ? ((st.proton.provider === "fixed" ? tx("js.fester_port") : tx("js.proton")) + tx("js.server") + (st.proton.server || "?")) : tx("js.ohne_vpn")],
+    st.proton.enabled ? [tx("js.exit_ip"), st.proton.exit_ip || tx("js.unbekannt")] : null,
+    st.proton.enabled ? [tx("js.port"), st.proton.ports && st.proton.ports.length ? st.proton.ports.join(", ") : tx("js.noch_unbekannt")] : null,
+    [tx("status.backend"), st.backend.addr || "-"],
+    [tx("js.lan_netze"), (st.backend.lan_nets || []).join(", ") || "-"],
+  ]);
+}
+
+// ---- wizard handlers ------------------------------------------------
+$("f-login").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const btn = ev.submitter || ev.target.querySelector("button");
+  await busy(btn, async () => {
+    try {
+      await api("POST", "/api/login", { password: $("login-pw").value });
+      $("login-pw").value = ""; msg("login-msg", "", "");
+      await boot();
+    } catch (e) { msg("login-msg", "err", esc(e.message)); }
+  });
+});
+
+$("f-pw").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  if ($("pw1").value !== $("pw2").value) { msg("pw-msg", "err", tx("js.die_passworter_stimmen_nicht_uberein")); return; }
+  const btn = ev.target.querySelector("button.primary");
+  await busy(btn, async () => {
+    try {
+      const body = { password: $("pw1").value };
+      if (S.session && S.session.password_set) body.old_password = $("pw0").value;
+      await api("POST", "/api/setup/password", body);
+      $("pw0").value = ""; $("pw1").value = ""; $("pw2").value = "";
+      S.session = await api("GET", "/api/session");
+      await loadStatus();
+      msg("pw-msg", "", "");
+      gotoStep(2);
+    } catch (e) { msg("pw-msg", "err", esc(e.message)); }
+  });
+});
+$("pw-skip").addEventListener("click", () => gotoStep(2));
+
+document.querySelectorAll("input[name=proton]").forEach((r) => r.addEventListener("change", toggleProton));
+readFile($("proton-file"), "proton-conf");
+
+$("proton-save").addEventListener("click", (ev) => busy(ev.target, async () => {
+  const v = document.querySelector("input[name=proton]:checked").value, on = v !== "off";
+  const body = on ? { enabled: true, provider: v === "fixed" ? "fixed" : "proton" } : { enabled: false };
+  if (v === "fixed") body.ports = $("proton-ports").value;
+  if (on && $("proton-conf").value.trim()) body.conf = $("proton-conf").value;
+  if (on) msg("proton-msg", "", tx("js.tunnel_wird_aufgebaut_und_getestet"));
+  try {
+    const r = await api("POST", "/api/setup/proton", body);
+    if (!on) msg("proton-msg", "ok", tx("js.ohne_vpn_gespeichert_der_eingang"));
+    else { const v = renderProtonTest(r); msg("proton-msg", v.kind, v.html); $("proton-conf").value = ""; $("proton-file").value = ""; }
+    await loadStatus(); prefillStep(2);
+  } catch (e) { msg("proton-msg", "err", esc(e.message)); }
+}));
+$("proton-next").addEventListener("click", () => gotoStep(3));
+
+$("backend-save").addEventListener("click", (ev) => busy(ev.target, async () => {
+  try {
+    const r = await api("POST", "/api/setup/backend", { backend: $("backend").value.trim(), lan_nets: lines($("lan").value) });
+    const v = renderBackendTest(r.test); msg("backend-msg", v.kind, v.html);
+    await loadStatus(); prefillStep(3);
+  } catch (e) { msg("backend-msg", "err", esc(e.message)); }
+}));
+$("log-follow").addEventListener("change", followLog);
+$("be-all").addEventListener("change", () => {
+  $("be-own").classList.toggle("hidden", $("be-all").checked);
+  if (!$("be-all").checked && !$("be-lan").value) $("be-lan").value = DEFAULT_LAN.join("\n");
+});
+$("be-save").addEventListener("click", (ev) => busy(ev.target, async () => {
+  try {
+    const nets = $("be-all").checked ? [] : lines($("be-lan").value);
+    const r = await api("POST", "/api/setup/backend", { backend: $("be-addr").value.trim(), lan_nets: nets });
+    const v = renderBackendTest(r.test); msg("be-msg", v.kind, v.html);
+    S.beFilled = false; refresh();
+  } catch (e) { msg("be-msg", "err", esc(e.message)); }
+}));
+$("sp-save").addEventListener("click", (ev) => busy(ev.target, async () => {
+  if ($("sp1").value !== $("sp2").value) { msg("sp-msg", "err", tx("js.die_passworter_stimmen_nicht_uberein")); return; }
+  try {
+    await api("POST", "/api/setup/password", { password: $("sp1").value, old_password: $("sp0").value });
+    $("sp0").value = ""; $("sp1").value = ""; $("sp2").value = "";
+    msg("sp-msg", "ok", tx("sys.passwort_geandert"));
+  } catch (e) { msg("sp-msg", "err", esc(e.message)); }
+}));
+$("backend-next").addEventListener("click", async () => { await loadStatus(); gotoStep(4); });
+$("finish").addEventListener("click", () => show("status"));
+document.querySelectorAll("#steps li").forEach((li) => li.addEventListener("click", async () => {
+  const k = Number(li.dataset.step);
+  if (!S.session.password_set && k > 1) return;
+  if (S.session.password_set) await loadStatus().catch(() => {});
+  gotoStep(k);
+}));
+
+$("btn-logout").addEventListener("click", async () => { try { await api("POST", "/api/logout", {}); } catch (e) {} boot(); });
+$("btn-wizard").addEventListener("click", async () => { await loadStatus(); gotoStep(firstOpenStep() === 4 ? 1 : firstOpenStep()); show("wizard"); });
+document.querySelectorAll("#nav button").forEach((b) => b.addEventListener("click", () => show(b.dataset.view)));
+
+// ---- traffic light ---------------------------------------------------
+const LIGHT = { ok: "OK", warn: tx("js.warnung"), error: tx("js.fehler"), unknown: tx("js.unbekannt") };
+const LCLASS = { ok: "ok", warn: "warn", error: "err" };
+function ldot(state) { return '<span class="dot ' + (LCLASS[state] || "") + '" title="' + esc(LIGHT[state] || "") + '"></span>'; }
+function lightsBar(light, labels, title) {
+  const c = (light && light.checks) || {};
+  const ov = (light && light.overall) || "unknown";
+  return "<span>" + ldot(ov) + "<b>" + esc(title) + ": " + esc(LIGHT[ov]) + "</b></span>" +
+    Object.keys(labels).map((k) => "<span>" + ldot(c[k] || "unknown") + esc(labels[k]) + "</span>").join("");
+}
+const AGENT_CHECKS = { proton: "VPN", natpmp: tx("js.port"), backend: tx("status.backend"), ddns: "DDNS", cert: tx("ui.zertifikat"),
+                       delivery: tx("js.ubertragung"), redirect: tx("status.redirect") };
+function date(ts) { return ts ? new Date(ts * 1000).toLocaleDateString(document.documentElement.lang) : "-"; }
+function when(ts) { return ts ? new Date(ts * 1000).toLocaleString(document.documentElement.lang) : "-"; }
+
+// 0.24.0 (owner): names everywhere in one order: entry/rewrite first, then grouped by role, then alphabetically
+const ROLE_ORDER = { entry: 0, endpoint: 1 };
+function byNameOrder(a, b) {
+  return ((ROLE_ORDER[a.role] ?? 9) - (ROLE_ORDER[b.role] ?? 9)) ||
+    ((a.name || "") + "." + (a.domain || "")).localeCompare((b.name || "") + "." + (b.domain || ""), "de", { sensitivity: "base" });
+}
+// 0.23.0: one block per name, every block with the same rows (owner)
+function ddnsBlocks(st) {
+  const d = st.ddns, m = st.myaddr;
+  if (!m.fqdn && !(st.names || []).length) return "<dl>" + dl([[tx("vpn.status"), tx("js.nicht_eingerichtet")]]) + "</dl>";
+  const SRC = { vpn: tx("js.vpn_exit_ip"), fallback: tx("js.ersatz_ip"), manual: tx("js.manuell") };
+  const profs = (st.proton && st.proton.profiles) || [];
+  const pname = (pid) => pid ? String(pid).split(",").map((i) => (profs.find((x) => x.id === i) || {}).name || i).join(", ") : tx("js.keins");
+  const role = (r) => r === "entry" ? tx("js.rolle_eingang") : tx("js.rolle_endpunkt");
+  const block = (fqdn, rows) => "<h3>" + esc(fqdn) + "</h3><dl>" + dl(rows) + "</dl>";
+  const out = [];
+  const main = () => block(m.fqdn, [[tx("js.rolle"), role("endpoint")], [tx("js.profil"), pname(m.profile)],
+    ["DDNS", d.enabled ? (d.configured ? tx("js.aktiv") : tx("js.schlussel_fehlt")) : tx("js.aus")],
+    [tx("js.ip_modus"), d.ip_mode === "manual" ? tx("js.manuell_2") + (d.manual_ip || "-") + ")"
+      : tx("js.vpn_exit_ip_ersatz_ip") + (d.fallback_ip || tx("js.keine"))],
+    [tx("js.a_eintrag"), d.last_ip ? (d.last_ip === "self" ? tx("js.anschluss_ip_alt_vor_0") : d.last_ip + (SRC[d.last_source] ? " (" + SRC[d.last_source] + ")" : "")) : "-"],
+    [tx("js.letztes_update"), d.last_ok ? age(d.last_ok) : tx("js.nie")],
+    [tx("js.nachstes_spatestens"), d.next_update ? when(d.next_update) : "-"],
+    d.waiting ? [tx("js.wartet"), d.waiting] : null, d.error && !d.queued ? [tx("js.fehler"), d.error] : null]);
+  const all = (st.names || []).slice();
+  if (m.fqdn) all.push({ main: true, name: m.name, domain: m.domain, role: "endpoint" });
+  all.sort(byNameOrder).forEach((n) => n.main ? out.push(main()) : out.push(block(n.name + "." + n.domain, [[tx("js.rolle"), role(n.role)],
+    [tx("js.profil"), pname(n.profile)],
+    ["DDNS", n.key_set ? tx("js.aktiv") : tx("js.schlussel_fehlt")],
+    [tx("js.ziel"), n.target || tx("js.unbekannt")],
+    [tx("js.a_eintrag"), n.sent_ip || "-"],
+    [tx("js.letztes_update"), n.last_ok ? age(n.last_ok) : tx("js.noch_nicht_gesendet")],
+    [tx("js.nachstes_spatestens"), n.next_update ? when(n.next_update) : "-"],
+    n.error ? [tx("js.fehler"), n.error] : null])));
+  return out.join("");
+}
+function certRows(c) {
+  if (c.running) return [[tx("vpn.status"), tx("js.wird_bestellt") + (c.step || "...")]];
+  const rows = [];
+  if (!c.present) rows.push([tx("vpn.status"), tx("js.noch_kein_zertifikat")]);
+  else rows.push([tx("js.namen"), (c.names || []).join(", ")], [tx("js.gultig_bis"), date(c.not_after) + " (" + Math.floor(c.days_left) + tx("js.tage")],
+    [tx("js.aussteller"), (c.issuer || "-") + (c.issued_staging ? tx("js.staging_nicht_vertrauenswurdig") : "")],
+    [tx("js.erneuerung"), c.auto ? tx("js.automatisch_ab_30_tagen_rest") : tx("js.manuell")]);
+  if ((c.missing || []).length) rows.push([tx("js.fehlt_noch"), c.missing.join(", ")]);
+  if (c.queued) rows.push([tx("js.wartet"), tx("js.kein_vpn_tunnel_bestellung_vorgemerkt")]);
+  if (c.last_error) rows.push([tx("js.letzter_fehler"), c.last_error + " (" + age(c.last_try) + ")"]);
+  return rows;
+}
+function redirectRows(r) {
+  if (!r.provider) return [[tx("vpn.status"), tx("js.aus")]];
+  return [[tx("js.eingang"), r.entry_host], [tx("js.anbieter"), r.provider === "cloudflare" ? tx("redirect.cloudflare") : tx("redirect.skript")],
+    [tx("js.ziel"), r.target || tx("js.unbekannt_port_fehlt")],
+    r.active_name ? [tx("redirect.regel_ziel_name"), r.active_name + " (" + tx("js.folgt_aktivem_profil") + ")"] : null,
+    [tx("js.zuletzt_gesetzt"), r.last_target ? r.last_target + " (" + age(r.last_ok) + ")" : "-"],
+    r.queued ? [tx("js.wartet"), tx("js.kein_vpn_tunnel") + r.queued + tx("js.vorgemerkt")] : null,
+    r.last_error ? [tx("js.fehler"), r.last_error] : null,
+  ].concat((r.mappings || []).slice(1).map((m) => [tx("js.regel"), m.entry + " -> " + m.target]));
+}
+function delRows(d) {
+  const row = (name, t, what) => !t.configured ? null : [name, what + ": " + (t.error ? tx("js.fehler_3") + t.error
+    : t.last_ok ? tx("js.ok") + age(t.last_ok) + (t.detail ? " (" + t.detail + ")" : "") : tx("js.noch_nicht_ubertragen"))];
+  const rows = [row("NPM", d.npm, d.npm.url), row(tx("cert.zoraxy"), d.zoraxy, d.zoraxy.dir)].filter((r) => r);
+  return rows.length ? rows : [[tx("vpn.status"), tx("js.kein_ziel_eingerichtet")]];
+}
+
+// ---- status --------------------------------------------------------
+async function refresh() {
+  let st;
+  try { st = await loadStatus(); } catch (e) { return; }
+  const L = (st.light && st.light.checks) || {};
+  const lk = (k) => LCLASS[L[k]] || "";
+  $("s-lights").innerHTML = lightsBar(st.light, AGENT_CHECKS, tx("js.gesamt"));
+  const p = st.proton;
+  renderProfiles(p);
+  if (!p.enabled) {
+    dot("d-proton", "");
+    $("s-proton").innerHTML = "<dl>" + dl([[tx("vpn.status"), tx("js.ohne_vpn")], [tx("js.hinweis"), tx("js.eingang_uber_deinen_router_port")],
+      [tx("js.internet"), tx("js.ohne_vpn_tunnel_keine_anfragen")]]) + "</dl>";
+  } else {
+    dot("d-proton", L.proton === "ok" && L.natpmp !== "ok" && L.natpmp !== "unknown" ? LCLASS[L.natpmp] : lk("proton"));
+    const has = (v, pid) => String(v || "").split(",").includes(pid);
+    const nameOf = (pid) => (pid && has(st.myaddr.profile, pid) ? st.myaddr.fqdn : "") ||
+      (st.names || []).filter((n) => has(n.profile, pid)).map((n) => n.name + "." + n.domain)[0];
+    const act = (p.profiles || []).find((x) => x.active) || {};
+    $("s-proton").innerHTML = "<h3>" + esc(tx("js.tunnel_aktiv")) + "</h3><dl>" + dl([
+      [tx("js.profil"), (p.profile_name || "-") + profPos(p, act.id)],
+      [tx("vpn.status"), p.up ? tx("js.aktiv") : tx("js.tunnel_lauft_nicht")],
+      [tx("vpn.art"), p.provider === "fixed" ? tx("js.fester_port") : tx("vpn.proton_nat_pmp")],
+      p.failover && p.failover.all_down ? [tx("vpn.failover"), tx("js.alle_profile_gestort")] : p.failover && p.failover.fails_now ? [tx("vpn.failover"), p.failover.fails_now + tx("js.fehlprufung_en") + (p.failover.reason || "")] : null,
+      [tx("vpn.server"), p.server || "-"], [tx("js.schnittstelle"), p.iface || "-"], [tx("js.exit_ip"), p.exit_ip || tx("js.unbekannt")],
+      p.provider === "fixed" ? [tx("js.ports"), (p.ports || []).join(", ") + tx("js.fest_tcp")]
+        : [tx("js.port"), p.port ? String(p.port) + tx("js.nat_pmp_tcp") : tx("js.unbekannt") + (p.natpmp && p.natpmp.error ? " (" + p.natpmp.error + ")" : "")],
+      st.myaddr.fqdn && p.port ? [tx("js.erreichbar"), "https://" + (nameOf(act.id) || st.myaddr.fqdn) + ":" + p.port] : null,
+      [tx("js.handshake"), p.up ? age(p.handshake) : tx("js.tunnel_lauft_nicht")], [tx("js.endpoint"), p.endpoint || p.config_endpoint || "-"],
+      [tx("js.transfer"), tx("js.rx") + bytes(p.rx) + tx("js.tx") + bytes(p.tx)],
+      ["MTU", mtuText(p)], p.error ? [tx("js.fehler"), p.error] : null]) + "</dl>" + standbyBlock(p.failover && p.failover.standby_tunnel, nameOf, p);
+  }
+  const b = st.backend;
+  dot("d-backend", lk("backend"));
+  $("s-backend").innerHTML = dl([[tx("js.adresse"), b.addr || "-"], ["TLS", b.checked ? (b.ok ? "ok" : tx("js.fehler")) : tx("js.noch_nicht_gepruft")],
+    [tx("js.latenz"), b.latency_ms ? b.latency_ms + tx("js.ms") : "-"], [tx("js.gepruft"), b.checked ? age(b.checked) : "-"],
+    b.error ? [tx("js.fehler"), b.error] : null, [tx("js.lan_netze"), (b.lan_nets || []).join(", ") || "-"]]);
+  if (S.view === "vpn" && !S.beFilled) {
+    S.beFilled = true;
+    const nets = b.lan_nets || [], all = !nets.length || (nets.length === DEFAULT_LAN.length && DEFAULT_LAN.every((n) => nets.includes(n)));
+    $("be-addr").value = b.addr || ""; $("be-all").checked = all; $("be-lan").value = all ? "" : nets.join("\n");
+    $("be-own").classList.toggle("hidden", all);
+  }
+  dot("be-dot", lk("backend"));
+  const le = st.lan_entry || {};
+  $("le-on").checked = le.enabled !== false;
+  $("s-lan").innerHTML = dl([[tx("js.lan_adresse"), (le.ips || []).join(", ") || tx("js.unbekannt")],
+    [tx("js.port"), (le.ports || []).length ? le.ports.join(", ") + tx("js.folgt_dem_vpn_port") : tx("js.keiner_kein_vpn_port")],
+    [tx("vpn.status"), !le.enabled ? tx("js.ausgeschaltet") : le.active ? tx("js.aktiv") : tx("js.wartet_auf_vpn_port")],
+    (le.urls || []).length ? [tx("js.im_lan"), le.urls.join(", ")] : null,
+    (le.skipped || []).length ? [tx("js.ubersprungen"), le.skipped.join(", ") + tx("js.port_des_webui")] : null,
+    Object.keys(le.errors || {}).length ? [tx("js.fehler"), Object.entries(le.errors).map(([k, v]) => k + ": " + v).join(", ")] : null]);
+  dot("d-ddns", lk("ddns")); $("s-ddns").innerHTML = ddnsBlocks(st);
+  const worst = [L.cert, L.delivery].includes("error") ? "err" : ([L.cert, L.delivery].includes("warn") ? "warn" : lk("cert"));
+  dot("d-cert", worst); $("s-cert").innerHTML = dl(certRows(st.cert).concat(st.cert.present ? delRows(st.delivery) : []));
+  dot("d-redirect", lk("redirect")); $("s-redirect").innerHTML = dl(redirectRows(st.redirect));
+  try { const l = await api("GET", "/api/logs"); const el = $("log");
+    el.textContent = l.lines.join("\n"); followLog(); } catch (err) {}
+}
+
+function actionMsg(btn) {
+  const sec = btn.closest("section").id;
+  return { "v-cert": btn.dataset.action === "ddns-update" ? "mn-msg" : "d-msg", "v-redirect": "r-msg" }[sec] || "action-msg";
+}
+function resultsText(r) {
+  return Object.keys(r.results || {}).map((k) => esc(k.toUpperCase() === "NPM" ? "NPM" : tx("cert.zoraxy")) + ": " +
+    (r.results[k].ok ? tx("js.ok_2") + esc(r.results[k].detail) + ")" : tx("js.fehler_3") + esc(r.results[k].error))).join("<br>");
+}
+document.querySelectorAll("button[data-action]").forEach((btn) => btn.addEventListener("click", () => busy(btn, async () => {
+  const name = btn.dataset.action, out = actionMsg(btn);
+  try {
+    const r = await api("POST", "/api/action/" + name, {});
+    if (name === "proton-reconnect") { const v = renderProtonTest(r); msg(out, v.kind, v.html); }
+    else if (name === "backend-test") { const v = renderBackendTest(r); msg(out, v.kind, v.html); }
+    else if (name === "natpmp-renew") msg(out, r.ok ? "ok" : "warn", r.ok
+      ? tx("js.port_2") + esc(r.port) + tx("js.tcp_auf") + esc(r.exit_ip || "?") + tx("js.fur") + esc(r.lifetime) + tx("js.s_gemappt")
+      : esc(r.error || tx("js.nat_pmp_antwortet_nicht")));
+    else if (name === "ddns-update" && r.queued) msg(out, "warn", esc(r.skipped));
+    else if (name === "ddns-update") msg(out, r.ok ? "ok" : "err", r.ok ? (r.ip ? tx("js.a_eintrag_gesetzt") + esc(r.ip) : esc(r.skipped || "ok"))
+      : esc(r.error || r.skipped || tx("js.fehler")));
+    else if (name === "cert-deliver") msg(out, r.ok ? "ok" : "err", resultsText(r));
+    else if (name === "redirect-run" && r.queued) msg(out, "warn", esc(r.message));
+    else if (name === "redirect-run") msg(out, r.ok ? "ok" : "err", r.ok ? tx("js.redirect_gesetzt") + esc(r.target) + " (" + esc(r.detail) + ")" : esc(r.error || tx("js.fehler")));
+    else msg(out, r.ok ? "ok" : "warn", r.ok ? tx("js.erledigt") : esc(r.error || tx("js.nicht_moglich")));
+  } catch (e) { msg(out, "err", esc(e.message)); }
+  if (REFRESH[S.view]) REFRESH[S.view]();
+})));
+
+// ---- certificate page ------------------------------------------------
+async function refreshCert() {
+  let st;
+  try { st = await loadStatus(); } catch (e) { return; }
+  const L = (st.light && st.light.checks) || {}, c = st.cert, d = st.delivery, m = st.myaddr;
+  if (!S.certFilled) {
+    S.certFilled = true;
+    fillNames(st);
+    $("m-ddns").checked = st.ddns.enabled || !m.name;
+    $("m-mode").value = st.ddns.ip_mode || "vpn"; $("m-fallback").value = st.ddns.fallback_ip || "";
+    $("m-manual").value = st.ddns.manual_ip || ""; toggleMode();
+    document.querySelector('input[name=c-env][value=' + (c.staging ? "staging" : "production") + "]").checked = true;
+    $("c-email").value = c.email || ""; $("c-delay").value = c.delay; $("c-auto").checked = c.auto; $("c-tos").checked = c.tos;
+    $("n-url").value = d.npm.url || ""; $("n-user").value = d.npm.identity || ""; $("n-name").value = d.npm.nice_name || "";
+    $("z-dir").value = d.zoraxy.dir || "";
+  }
+  $("n-pass-state").textContent = d.npm.secret_set ? tx("js.gespeichert") : "";
+  $("c-names").textContent = (c.wanted || []).length ? c.wanted.join(", ") : tx("cert.name_myaddr_tools_und_name");
+  dot("c-ddns-dot", LCLASS[L.ddns] || ""); $("c-ddns").innerHTML = ddnsBlocks(st);
+  dot("c-cert-dot", LCLASS[L.cert] || ""); $("c-cert").innerHTML = dl(certRows(c));
+  $("c-dl-names").textContent = c.present ? tx("cert.ein_zertifikat_fur") + (c.names || []).join(", ") : "";
+  dot("c-del-dot", LCLASS[L.delivery] || ""); $("c-del").innerHTML = dl(delRows(d));
+  $("c-issue").disabled = c.running;
+  $("c-dl").classList.toggle("hidden", !c.present);
+  $("t-state").textContent = c.pull_token ? tx("js.token_aktiv_seit") + date(c.pull_token_created) : tx("js.kein_token");
+}
+function toggleMode() {
+  const manual = $("m-mode").value === "manual";
+  $("m-manual-wrap").classList.toggle("hidden", !manual);
+  $("m-fallback-wrap").classList.toggle("hidden", manual);
+  $("m-mode-hint").textContent = manual ? tx("js.es_wird_immer_die_manuelle")
+    : tx("js.ist_die_exit_ip_unbekannt");
+}
+$("m-mode").addEventListener("change", toggleMode);
+function certBody() {
+  return { staging: document.querySelector("input[name=c-env]:checked").value === "staging", email: $("c-email").value.trim(),
+           delay: $("c-delay").value.trim(), auto: $("c-auto").checked, tos: $("c-tos").checked };
+}
+$("c-save").addEventListener("click", (ev) => busy(ev.target, async () => {
+  try { await api("POST", "/api/cert/settings", certBody()); msg("c-msg", "ok", tx("js.gespeichert_3")); }
+  catch (e) { msg("c-msg", "err", esc(e.message)); }
+  refreshCert();
+}));
+$("c-issue").addEventListener("click", (ev) => busy(ev.target, async () => {
+  try {
+    await api("POST", "/api/cert/settings", certBody());
+    const r = await api("POST", "/api/action/cert-issue", {});
+    if (r.queued) msg("c-msg", "warn", esc(r.message));
+    else msg("c-msg", "ok", tx("js.bestellung_lauft_mit_wartezeit_fur"));
+  } catch (e) { msg("c-msg", "err", esc(e.message)); }
+  refreshCert();
+}));
+$("t-new").addEventListener("click", (ev) => busy(ev.target, async () => {
+  try {
+    const r = await api("POST", "/api/cert/pull-token", {});
+    msg("t-msg", "ok", tx("js.neuer_token_wird_nur_jetzt") + esc(r.token) + "</pre>");
+  } catch (e) { msg("t-msg", "err", esc(e.message)); }
+  refreshCert();
+}));
+$("t-drop").addEventListener("click", (ev) => busy(ev.target, async () => {
+  try { await api("POST", "/api/cert/pull-token", { revoke: true }); msg("t-msg", "ok", tx("js.token_widerrufen")); }
+  catch (e) { msg("t-msg", "err", esc(e.message)); }
+  refreshCert();
+}));
+$("d-save").addEventListener("click", (ev) => busy(ev.target, async () => {
+  const npm = { url: $("n-url").value.trim(), identity: $("n-user").value.trim(), nice_name: $("n-name").value.trim() };
+  if ($("n-pass").value) npm.secret = $("n-pass").value;
+  try { await api("POST", "/api/delivery", { npm, zoraxy: { dir: $("z-dir").value.trim() } }); $("n-pass").value = ""; msg("d-msg", "ok", tx("js.gespeichert_3")); }
+  catch (e) { msg("d-msg", "err", esc(e.message)); }
+  refreshCert();
+}));
+
+// ---- redirect page ---------------------------------------------------
+function toggleRedirect() {
+  const p = document.querySelector("input[name=r-prov]:checked").value;
+  $("r-cf").classList.toggle("hidden", p !== "cloudflare");
+  $("r-script").classList.toggle("hidden", p !== "script");
+}
+document.querySelectorAll("input[name=r-prov]").forEach((r) => r.addEventListener("change", toggleRedirect));
+async function refreshRedirect() {
+  let st;
+  try { st = await loadStatus(); } catch (e) { return; }
+  const r = st.redirect, L = (st.light && st.light.checks) || {};
+  if (!S.redirFilled) {
+    S.redirFilled = true;
+    document.querySelector('input[name=r-prov][value="' + (r.provider || "") + '"]').checked = true;
+    $("r-status").value = String(r.status || 302);
+    $("r-port").value = r.fixed_port || ""; $("r-zone").value = r.cf.zone || "";
+    S.rulesCtx = { active: r.active_name || "", bound: r.profile_names || [], endpoints: r.endpoints || [], entries: (st.names || []).filter((n) => n.role === "entry").sort(byNameOrder).map((n) => n.name + "." + n.domain) };
+    $("r-rules").innerHTML = "";
+    [{ entry: r.entry_host, sub: r.sub, to: r.to }].concat(r.rules || []).forEach(addRule);
+    try { $("r-text").value = (await api("GET", "/api/redirect/script")).script; } catch (e) {}
+    const g = r.gen || {};
+    $("g-kind").value = g.kind || (r.provider === "script" ? "" : "htaccess");
+    $("g-user").value = g.user || ""; $("g-host").value = g.host || ""; $("g-port").value = g.port || "";
+    $("g-root").value = g.root || "";
+    toggleGen(false);
+    toggleRedirect();
+  }
+  $("r-token-state").textContent = r.cf.token_set ? tx("js.gespeichert") : "";
+  $("r-pub").textContent = r.ssh_public_key || tx("js.noch_kein_schlussel");
+  dot("r-dot", LCLASS[L.redirect] || "");
+  $("r-state").innerHTML = dl(redirectRows(r).concat([r.last_rc !== null && r.last_rc !== undefined && r.provider === "script" ? [tx("js.exit_code"), String(r.last_rc)] : null]));
+  S.rulesPort = (/:(\d+)$/.exec(r.target || "") || [])[1] || "";
+  if (S.rulesCtx) Object.assign(S.rulesCtx, { active: r.active_name || "", bound: r.profile_names || [] });
+  document.querySelectorAll("#r-rules tr").forEach(rulePreview);
+  $("r-out").textContent = (r.last_output || []).join("\n") || "-";
+}
+// ---- script generator (0.16.0) ----
+function genOf() {
+  return { kind: $("g-kind").value, user: $("g-user").value.trim(), host: $("g-host").value.trim(),
+    port: $("g-port").value.trim() || 22, root: $("g-root").value.trim() };
+}
+let genTimer = null;
+async function genPreview() {
+  const g = genOf();
+  if (!g.kind || !g.user || !g.host) { $("r-text").value = ""; return; }
+  try { $("r-text").value = (await api("POST", "/api/redirect/preview", g)).script; msg("g-msg", "", ""); }
+  catch (e) { msg("g-msg", "err", esc(e.message)); }
+}
+function toggleGen(preview) {
+  const gen = !!$("g-kind").value;
+  $("g-fields").classList.toggle("hidden", !gen);
+  ["g-test", "g-own"].forEach((id) => $(id).classList.toggle("hidden", !gen));
+  $("g-ex").classList.toggle("hidden", gen);
+  $("r-text").readOnly = gen;
+  $("g-prev-label").textContent = tx(gen ? "gen.vorschau" : "gen.skript");
+  if (gen && preview) genPreview();
+}
+$("g-kind").addEventListener("change", () => toggleGen(true));
+["g-user", "g-host", "g-port", "g-root"].forEach((id) => $(id).addEventListener("input", () => {
+  clearTimeout(genTimer); genTimer = setTimeout(genPreview, 400);
+}));
+$("g-own").addEventListener("click", () => { $("g-kind").value = ""; toggleGen(false); $("r-text").focus(); });
+$("g-test").addEventListener("click", (ev) => busy(ev.target, async () => {
+  msg("g-msg", "", tx("gen.test_lauft"));
+  try {
+    const r = await api("POST", "/api/redirect/test", genOf());
+    msg("g-msg", r.ok ? "ok" : "err", (r.ok ? "" : tx("gen.test_fehler") + " (" + r.rc + ")") + "<pre class=\"log\">" + esc((r.output || []).join("\n")) + "</pre>");
+  } catch (e) { msg("g-msg", "err", esc(e.message)); }
+}));
+document.querySelectorAll("button[data-example]").forEach((btn) => btn.addEventListener("click", async () => {
+  if ($("r-text").value.trim() && !confirm(tx("js.skript_durch_das_beispiel_ersetzen"))) return;
+  try { $("r-text").value = (await api("GET", "/api/redirect/example/" + btn.dataset.example)).script; } catch (e) { msg("r-msg", "err", esc(e.message)); }
+}));
+$("r-save").addEventListener("click", (ev) => busy(ev.target, async () => {
+  const body = { provider: document.querySelector("input[name=r-prov]:checked").value, status: Number($("r-status").value), fixed_port: $("r-port").value.trim(),
+    cf: { zone: $("r-zone").value.trim(), token: $("r-token").value.trim() }, gen: genOf(),
+    rules: [...document.querySelectorAll("#r-rules tr")].map(ruleOf) };
+  if (body.provider === "script" && !body.gen.kind) body.script = $("r-text").value;
+  if (body.provider !== "script") delete body.gen;
+  const main = body.rules.shift() || { entry: "", sub: "", to: "" };
+  Object.assign(body, { entry_host: main.entry, sub: main.sub, to: main.to });
+  try {
+    await api("POST", "/api/redirect", body);
+    $("r-token").value = "";
+    if (body.provider) {
+      const r = await api("POST", "/api/action/redirect-run", {});
+      msg("r-msg", r.ok ? "ok" : "err", r.ok ? tx("js.gespeichert_redirect_gesetzt") + esc(r.target) : tx("js.gespeichert_aber") + esc(r.error));
+    } else msg("r-msg", "ok", tx("js.gespeichert_redirect_aus"));
+  } catch (e) { msg("r-msg", "err", esc(e.message)); }
+  refreshRedirect();
+}));
+$("r-gen").addEventListener("click", (ev) => busy(ev.target, async () => {
+  if ($("r-pub").textContent.startsWith("ssh-") && !confirm(tx("js.neuen_schlussel_erzeugen_der_bisherige"))) return;
+  try { await api("POST", "/api/redirect/ssh-key", { generate: true }); msg("r-key-msg", "ok", tx("js.schlussel_erzeugt_offentlichen_schlussel_oben")); }
+  catch (e) { msg("r-key-msg", "err", esc(e.message)); }
+  refreshRedirect();
+}));
+$("r-up").addEventListener("click", (ev) => busy(ev.target, async () => {
+  try { await api("POST", "/api/redirect/ssh-key", { key: $("r-priv").value }); $("r-priv").value = ""; msg("r-key-msg", "ok", tx("js.schlussel_gespeichert")); }
+  catch (e) { msg("r-key-msg", "err", esc(e.message)); }
+  refreshRedirect();
+}));
+
+// ---- push page -------------------------------------------------------
+async function refreshPush() {
+  let st;
+  try { st = await loadStatus(); } catch (e) { return; }
+  const p = st.push;
+  if (!S.pushFilled) {
+    S.pushFilled = true;
+    $("pg-url").value = p.gotify.url || ""; $("pn-url").value = p.ntfy.url || ""; $("pn-topic").value = p.ntfy.topic || "";
+    $("p-rem").value = p.reminder || 30;
+  }
+  $("pg-token-state").textContent = p.gotify.token_set ? tx("js.gespeichert") : "";
+  $("pn-token-state").textContent = p.ntfy.token_set ? tx("js.gespeichert") : "";
+  const row = (name, t) => !t.url ? null : [name, t.url + (t.lan ? tx("js.lan_auch_bei_vpn_ausfall") : tx("js.internet_nur_uber_vpn")) +
+    (t.error ? tx("js.fehler_4") + t.error : t.last_ok ? tx("js.ok_3") + age(t.last_ok) : "") + (t.queued ? " - " + t.queued + tx("js.wartend") : "")];
+  const rows = [row(tx("push.gotify"), p.gotify), row("ntfy", p.ntfy)].filter((r) => r);
+  if (p.down_since) rows.push([tx("js.vpn_ausfall"), tx("js.seit") + when(p.down_since)]);
+  dot("p-dot", !rows.length ? "" : (p.gotify.error || p.ntfy.error) ? "err" : "ok");
+  $("p-state").innerHTML = dl(rows.length ? rows : [[tx("vpn.status"), tx("js.kein_ziel_eingerichtet")]]);
+}
+function pushBody() {
+  const b = { reminder: $("p-rem").value.trim() || 30, gotify: { url: $("pg-url").value.trim() },
+              ntfy: { url: $("pn-url").value.trim(), topic: $("pn-topic").value.trim() } };
+  if ($("pg-token").value.trim()) b.gotify.token = $("pg-token").value.trim();
+  if ($("pn-token").value.trim()) b.ntfy.token = $("pn-token").value.trim();
+  return b;
+}
+$("p-save").addEventListener("click", (ev) => busy(ev.target, async () => {
+  try { await api("POST", "/api/push", pushBody()); $("pg-token").value = ""; $("pn-token").value = ""; msg("p-msg", "ok", tx("js.gespeichert_3")); }
+  catch (e) { msg("p-msg", "err", esc(e.message)); }
+  refreshPush();
+}));
+$("p-test").addEventListener("click", (ev) => busy(ev.target, async () => {
+  try {
+    await api("POST", "/api/push", pushBody()); $("pg-token").value = ""; $("pn-token").value = "";
+    const r = await api("POST", "/api/action/push-test", {});
+    msg("p-msg", r.ok ? "ok" : "err", Object.keys(r.results).map((k) => (k === "gotify" ? tx("push.gotify") : "ntfy") + ": " +
+      (r.results[k].ok ? tx("js.gesendet") : esc(r.results[k].error))).join("<br>"));
+  } catch (e) { msg("p-msg", "err", esc(e.message)); }
+  refreshPush();
+}));
+
+// ---- rewrite rules and further myaddr names (rows edited in place) -------------------------
+function delBtn() { return '<button type="button" data-del>' + esc(tx("js.loschen")) + "</button>"; }
+document.addEventListener("click", (ev) => { const b = ev.target.closest("button[data-del]"); if (b) b.closest("tr").remove(); });
+function ruleOf(tr) {
+  const sel = tr.querySelector(".rr-entry-sel").value, esub = tr.querySelector(".rr-esub").value.trim().toLowerCase().replace(/\.+$/, "");
+  return { entry: sel === "custom" ? tr.querySelector(".rr-entry").value.trim().toLowerCase() : (esub ? esub + "." : "") + sel,
+    sub: tr.querySelector(".rr-sub").value.trim().toLowerCase(), to: tr.querySelector(".rr-to").value };
+}
+function rulePreview(tr) {
+  const r = ruleOf(tr), ctx = S.rulesCtx || { endpoints: [] };
+  // 0.23.1: the main name and every profile's name follow the active VPN profile (failover)
+  const follows = !!ctx.active && (!r.to || (ctx.bound || []).includes(r.to));
+  const base = follows ? ctx.active : r.to || ctx.endpoints[0] || "<name>.myaddr.tools";
+  const sub = r.sub || "";
+  tr.querySelector(".rr-follow").textContent = follows ? tx("js.folgt_aktivem_profil") : "";
+  const custom = tr.querySelector(".rr-entry-sel").value === "custom";
+  tr.querySelector(".rr-entry").classList.toggle("hidden", !custom); tr.querySelector(".rr-esub").classList.toggle("hidden", custom);
+  tr.querySelector(".rr-out").textContent = r.entry ? "https://" + (sub ? sub + "." : "") + base + ":" + (S.rulesPort || "<Port>") : "-";
+}
+function addRule(r) {
+  const ctx = S.rulesCtx || { endpoints: [], entries: [] }, first = !$("r-rules").children.length;
+  const entries = ctx.entries;  // 0.23.0: subdomain (or * for any) in its own field (owner)
+  const opt = (v, t) => '<option value="' + esc(v) + '">' + esc(t || v) + "</option>";
+  const tr = document.createElement("tr");
+  tr.innerHTML = '<td><div class="rr-epair"><input type="text" class="rr-esub" spellcheck="false" placeholder="' + esc(tx(first ? "js.regel_eingang_sub_ph1" : "js.regel_eingang_sub_ph")) + '">' +
+    '<select class="rr-entry-sel">' + entries.map((e) => opt(e)).join("") + opt("custom", tx("js.eigener_host")) + "</select></div>" +
+    '<input type="text" class="rr-entry" spellcheck="false" placeholder="start.example.ch' + (first ? "" : " / *.example.ch") + '"></td>' +
+    '<td><input type="text" class="rr-sub" spellcheck="false" placeholder="' + esc(tx("js.regel_ziel_placeholder")) + '"></td>' +
+    '<td><select class="rr-to">' + ctx.endpoints.map((e, i) => opt(i ? e : "", ctx.active && !i ? tx("js.aktives_profil") : e + (i ? "" : " (" + tx("js.hauptname") + ")"))).join("") + "</select></td>" +
+    '<td class="small"><span class="rr-out"></span><span class="muted small rr-follow" style="display:block"></span></td><td>' + (first ? '<span class="muted small">' + esc(tx("js.haupteingang")) + "</span>" : delBtn()) + "</td>";
+  const entry = (r && r.entry) || "";
+  const sel = tr.querySelector(".rr-entry-sel");
+  // split "app.eingang-muster.myaddr.io" into subdomain "app" and the name "eingang-muster.myaddr.io"
+  const base = entries.find((e) => entry === e) || entries.filter((e) => entry.endsWith("." + e)).sort((a, b) => b.length - a.length)[0];
+  sel.value = base ? base : entry ? "custom" : (entries[0] || "custom");
+  tr.querySelector(".rr-esub").value = base && entry !== base ? entry.slice(0, -base.length - 1) : "";
+  tr.querySelector(".rr-entry").value = base ? "" : entry;
+  tr.querySelector(".rr-sub").value = (r && r.sub) || "";
+  tr.querySelector(".rr-to").value = (r && r.to) || "";
+  tr.addEventListener("input", () => rulePreview(tr)); tr.addEventListener("change", () => rulePreview(tr));
+  $("r-rules").appendChild(tr);
+  rulePreview(tr);
+}
+$("r-rule-add").addEventListener("click", () => addRule());
+["r-save2", "r-save3"].forEach((id) => $(id).addEventListener("click", () => $("r-save").click()));
+const DOMAINS = ["myaddr.tools", "myaddr.dev", "myaddr.io"];
+function fillNames(st) {
+  const m = st.myaddr || {}, d = st.ddns || {};
+  if (st.proton && st.proton.profiles) S.profiles = st.proton.profiles;  // the names page can open first
+  $("mn-rows").innerHTML = "";
+  const all = (st.names || []).slice();
+  if (m.name) all.push({ id: "main", name: m.name, domain: m.domain, role: "endpoint", key_set: m.key_set, profile: m.profile,
+    sent_ip: d.last_ip, last_ok: d.last_ok, error: d.error });
+  all.sort(byNameOrder).forEach(addName);
+  if (!m.name) addName({ role: "endpoint" });
+  markBase();
+}
+// the base name (first connection name without profile): DDNS settings below, always in the certificate
+function markBase() {
+  const rows = [...document.querySelectorAll("#mn-rows tr")].filter((tr) => tr.querySelector(".mn-role").value === "endpoint");
+  // same choice as the server: no profile first; within that group the current base row (id main) wins
+  const noprof = rows.filter((tr) => !profValue(tr.querySelector(".mn-profile"))), group = noprof.length ? noprof : rows;
+  const base = group.find((tr) => tr.dataset.id === "main") || group[0];
+  document.querySelectorAll("#mn-rows .mn-cert").forEach((c) => {
+    const isBase = base && c.closest("tr") === base;
+    if (isBase) c.checked = true;
+    c.disabled = !!isBase; c.title = isBase ? tx("js.basisname") : "";
+  });
+}
+function nameState(n) {
+  if (!n || !n.id) return "";
+  if (n.error) return tx("js.fehler") + ": " + n.error;
+  return n.last_ok ? n.sent_ip + " (" + age(n.last_ok) + ")" : tx("js.noch_nicht_gesendet");
+}
+// the profile picker of a name row: checked ids as "p1,p2", the summary shows their names in list order
+function profValue(el) { return [...el.querySelectorAll("input:checked")].map((c) => c.value).join(","); }
+function setProf(el, value) {
+  const ids = String(value || "").split(",").filter(Boolean);
+  el.querySelectorAll("input").forEach((c) => { c.checked = ids.includes(c.value); });
+  const names = [...el.querySelectorAll("input:checked")].map((c) => c.parentNode.textContent.trim());
+  el.querySelector("summary").textContent = names.length ? names.join(", ") : tx("js.wie_hauptname");
+}
+document.addEventListener("click", (ev) => document.querySelectorAll("details.mn-profile[open]").forEach((d) => {
+  if (!d.contains(ev.target)) d.open = false; }));
+function addName(n) {
+  const tr = document.createElement("tr");
+  tr.dataset.id = (n && n.id) || "";
+  tr.innerHTML = '<td><input type="text" class="mn-name" spellcheck="false" autocomplete="off"></td>' +
+    '<td><select class="mn-domain">' + DOMAINS.map((d) => "<option>" + d + "</option>").join("") + "</select></td>" +
+    '<td><select class="mn-role"><option value="entry">' + esc(tx("js.rolle_eingang")) + '</option><option value="endpoint">' +
+    esc(tx("js.rolle_endpunkt")) + "</option></select></td>" +
+    '<td><input type="text" class="mn-ip" spellcheck="false" autocomplete="off" placeholder="203.0.113.20"></td>' +
+    // 0.25.0 (owner): several VPN profiles per name; the name follows the active one of them, else the standby
+    '<td><details class="mn-profile"><summary></summary><div class="mn-prof-list">' +
+    (S.profiles || []).map((x) => '<label><input type="checkbox" value="' + esc(x.id) + '"> ' + esc(x.name) + "</label>").join("") +
+    "</div></details></td>" +
+    '<td><input type="password" class="mn-key" autocomplete="off" placeholder="' + esc(n && n.key_set ? tx("js.gespeichert") : "") + '"></td>' +
+    '<td><input type="checkbox" class="mn-cert"></td>' +
+    '<td class="small mn-state">' + esc(nameState(n)) + "</td><td>" + delBtn() + "</td>";
+  tr.querySelector(".mn-name").value = (n && n.name) || ""; tr.querySelector(".mn-domain").value = (n && n.domain) || "myaddr.tools";
+  tr.querySelector(".mn-role").value = (n && n.role) || "endpoint"; tr.querySelector(".mn-ip").value = (n && n.ip) || "";
+  const role = tr.querySelector(".mn-role"), ip = tr.querySelector(".mn-ip"), prof = tr.querySelector(".mn-profile");
+  setProf(prof, (n && n.profile) || "");
+  prof.addEventListener("change", () => setProf(prof, profValue(prof)));
+  const cert = tr.querySelector(".mn-cert"); cert.checked = !n || n.cert !== false;
+  const sync = () => { ip.disabled = role.value !== "entry"; if (ip.disabled) ip.value = "";
+    prof.classList.toggle("off", role.value !== "endpoint"); if (role.value !== "endpoint") { setProf(prof, ""); prof.open = false; } };
+  role.addEventListener("change", () => { sync(); markBase(); });
+  prof.addEventListener("change", markBase);
+  sync();
+  $("mn-rows").appendChild(tr);
+}
+$("mn-add").addEventListener("click", () => { addName(); markBase(); });
+$("mn-save").addEventListener("click", (ev) => busy(ev.target, async () => {
+  const names = [...document.querySelectorAll("#mn-rows tr")].map((tr) => ({ id: tr.dataset.id,
+    name: tr.querySelector(".mn-name").value.trim(), domain: tr.querySelector(".mn-domain").value,
+    role: tr.querySelector(".mn-role").value, ip: tr.querySelector(".mn-ip").value.trim(),
+    profile: profValue(tr.querySelector(".mn-profile")), cert: tr.querySelector(".mn-cert").checked,
+    key: tr.querySelector(".mn-key").value.trim() })).filter((n) => n.name);
+  const main = names.find((n) => n.role === "endpoint" && !n.profile) || names.find((n) => n.role === "endpoint");
+  if (main) Object.assign(main, { ddns: $("m-ddns").checked, ip_mode: $("m-mode").value,
+    fallback_ip: $("m-fallback").value.trim(), manual_ip: $("m-manual").value.trim() });
+  try {
+    const r = await api("POST", "/api/myaddr/all", { names });
+    msg("mn-msg", "ok", tx("js.gespeichert_2") + esc(r.fqdn));
+    fillNames(await loadStatus());
+  } catch (e) { msg("mn-msg", "err", esc(e.message)); }
+  refreshCert();
+}));
+
+function rotateFields() {
+  const m = $("fo-rotate").value;
+  $("fo-at-wrap").classList.toggle("hidden", m !== "daily");
+  $("fo-hours-wrap").classList.toggle("hidden", m !== "hours");
+}
+$("fo-rotate").addEventListener("change", rotateFields);
+
+// --- language (Auto or a lang/*.json file, stored per browser; reload applies it) ------------------
+(function langSelect() {
+  const sel = $("set-lang");
+  Object.keys(PF_I18N).sort().forEach((code) => {
+    const o = document.createElement("option");
+    o.value = code; o.textContent = PF_I18N[code]._name || code; sel.appendChild(o);
+  });
+  sel.value = PF_I18N[I18N.pref] ? I18N.pref : "auto";
+  sel.addEventListener("change", () => {
+    try { if (sel.value === "auto") localStorage.removeItem("pf-lang"); else localStorage.setItem("pf-lang", sel.value); } catch (e) { /* ignore */ }
+    location.reload();
+  });
+})();
+
+// --- theme (Auto / Hell / Dunkel, stored per browser) -------------------------------------
+(function themeToggle() {
+  const sel = document.getElementById("theme");
+  let t = null;
+  try { t = localStorage.getItem("pf-theme"); } catch (e) { /* storage blocked */ }
+  sel.value = t === "light" || t === "dark" ? t : "auto";
+  sel.addEventListener("change", () => {
+    const v = sel.value;
+    if (v === "auto") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = v;
+    try { if (v === "auto") localStorage.removeItem("pf-theme"); else localStorage.setItem("pf-theme", v); } catch (e) { /* ignore */ }
+  });
+})();
+
+async function protonChange(btn, body) {
+  await busy(btn, async () => {
+    msg("pc-msg", "", tx("js.bitte_warten"));
+    try {
+      const r = await api("POST", "/api/setup/proton", body);
+      if (!body.enabled) msg("pc-msg", "ok", tx("js.vpn_ist_ausgeschaltet"));
+      else { const v = renderProtonTest(r); msg("pc-msg", v.kind, v.html); }
+    } catch (e) { msg("pc-msg", "err", esc(e.message)); }
+    refresh();
+  });
+}
+$("pc-on").addEventListener("click", (ev) => protonChange(ev.target, { enabled: true }));
+$("pc-off").addEventListener("click", (ev) => {
+  if (!confirm(tx("js.vpn_ausschalten_port_und_dnat"))) return;
+  protonChange(ev.target, { enabled: false });
+});
+
+// ---- VPN profiles ------------------------------------------------------
+function renderProfiles(p) {
+  const list = p.profiles || [];
+  S.profiles = list;
+  const b = (kind, id, text, title) => '<button type="button" data-vp="' + kind + '" data-id="' + esc(id) + '"' +
+    (title ? ' title="' + title + '"' : "") + ">" + text + "</button>";
+  $("vp-list").innerHTML = list.length ? list.map((x, i) =>
+    "<tr><td>" + (i + 1) + "</td><td>" + esc(x.name) + "</td><td>" +
+    (x.provider === "fixed" ? tx("js.fester_port_2") + esc(x.ports.join(", ")) : tx("vpn.proton_nat_pmp")) +
+    (x.mtu_effective ? tx("js.br_span_class_muted_small") + x.mtu_effective + (x.mtu === "conf" ? tx("js.konfiguration") : "") + "</span>" : "") + "</td><td>" +
+    esc(x.server || x.endpoint || "-") + "</td><td>" + (x.active && p.enabled ? tx("js.b_aktiv_b") : x.standby && p.enabled ? tx("js.reserve") + (x.standby_ready ? " (" + tx("js.bereit") + ")" : " - " + esc(x.standby_reason || tx("js.wird_aufgebaut"))) : x.enabled ? tx("js.bereit") : tx("js.aus")) +
+    '</td><td><div class="row" style="margin:0">' +
+    (i > 0 ? b("up", x.id, "&uarr;", tx("js.hoher")) : "") + (i < list.length - 1 ? b("down", x.id, "&darr;", tx("js.tiefer")) : "") +
+    b("edit", x.id, tx("js.bearbeiten")) + (!x.active && x.enabled && p.enabled ? b("activate", x.id, tx("js.aktivieren")) : "") +
+    b("delete", x.id, tx("js.loschen")) + "</div></td></tr>").join("")
+    : tx("js.tr_td_colspan_6_class");
+  if (!list.length && !S.vpAuto) { S.vpAuto = true; vpForm(null); }
+  const f = p.failover || {};
+  if (!S.foFilled && f.fails) {
+    S.foFilled = true;
+    $("fo-fails").value = f.fails; $("fo-hold").value = Math.round((f.hold || 0) / 60); $("fo-standby").checked = f.standby !== false;
+    $("fo-rotate").value = f.rotate || "off"; $("fo-at").value = f.rotate_at || "04:00"; $("fo-hours").value = f.rotate_hours || 24;
+    rotateFields();
+  }
+  $("fo-next").textContent = f.next_rotate ? tx("js.nachste_rotation") + when(f.next_rotate) : "";
+  $("vp-events").innerHTML = (f.events || []).length ? f.events.slice(0, 10).map((e) =>
+    esc(when(e.time)) + ": " + esc(e.text)).join("<br>") : tx("js.span_class_muted_keine_span");
+}
+function vpToggle() {
+  $("vp-ports-wrap").classList.toggle("hidden", $("vp-provider").value !== "fixed");
+  $("vp-mtu-wrap").classList.toggle("hidden", $("vp-mtu-mode").value === "conf");
+}
+function vpForm(x) {
+  $("vp-id").value = x ? x.id : ""; $("vp-name").value = x ? x.name : ""; $("vp-provider").value = x ? x.provider : "proton";
+  $("vp-ports").value = x ? (x.ports || []).join(", ") : ""; $("vp-enabled").checked = x ? x.enabled : true;
+  $("vp-conf").value = ""; $("vp-file").value = "";
+  $("vp-mtu-mode").value = x && x.mtu === "conf" ? "conf" : "set";
+  $("vp-mtu").value = x && x.mtu !== "conf" && x.mtu ? x.mtu : 1340;
+  $("vp-mtu-conf").textContent = x ? (x.conf_mtu ? tx("js.die_gespeicherte_datei_setzt_mtu") + x.conf_mtu + "."
+    : tx("js.die_gespeicherte_datei_setzt_keine")) : "";
+  $("vp-conf-state").textContent = x ? tx("js.leer_lassen_gespeicherte_datei_behalten") : "";
+  $("vp-form-title").textContent = x ? tx("js.profil_bearbeiten") + x.name : tx("vpn.neues_profil");
+  vpToggle();
+  $("vp-card").classList.remove("hidden"); msg("vp-msg", "", "");
+}
+function vpClose() { $("vp-card").classList.add("hidden"); $("vp-id").value = ""; 
+}
+$("vp-provider").addEventListener("change", vpToggle);
+$("vp-mtu-mode").addEventListener("change", vpToggle);
+vpToggle();
+readFile($("vp-file"), "vp-conf");
+$("vp-new").addEventListener("click", () => { vpForm(null); $("vp-name").focus(); });
+$("vp-cancel").addEventListener("click", vpClose);
+$("vp-save").addEventListener("click", (ev) => busy(ev.target, async () => {
+  const body = { name: $("vp-name").value.trim(), provider: $("vp-provider").value, enabled: $("vp-enabled").checked };
+  if ($("vp-id").value) body.id = $("vp-id").value;
+  if (body.provider === "fixed") body.ports = $("vp-ports").value;
+  body.mtu = $("vp-mtu-mode").value === "conf" ? "conf" : $("vp-mtu").value.trim();
+  if ($("vp-conf").value.trim()) body.conf = $("vp-conf").value;
+  try {
+    const r = await api("POST", "/api/vpn/profile", body);
+    if (r.test) { const v = renderProtonTest(r); msg("pc-msg", v.kind, tx("js.profil_gespeichert_und_gestartet") + v.html); }
+    else msg("pc-msg", "ok", tx("js.profil_gespeichert") + esc(r.profile.name));
+    vpClose();
+  } catch (e) { msg("vp-msg", "err", esc(e.message)); }
+  refresh();
+}));
+$("vp-list").addEventListener("click", (ev) => {
+  const btn = ev.target.closest("button[data-vp]");
+  if (!btn) return;
+  const id = btn.dataset.id, kind = btn.dataset.vp, list = S.profiles || [];
+  const x = list.find((p) => p.id === id);
+  if (kind === "edit") { vpForm(x); $("vp-card").scrollIntoView({ block: "nearest" }); return; }
+  if (kind === "delete" && !confirm(tx("js.profil_2") + x.name + tx("js.loschen_2"))) return;
+  busy(btn, async () => {
+    try {
+      if (kind === "up" || kind === "down") {
+        const ids = list.map((p) => p.id), i = ids.indexOf(id), j = kind === "up" ? i - 1 : i + 1;
+        [ids[i], ids[j]] = [ids[j], ids[i]];
+        await api("POST", "/api/vpn/order", { ids });
+      } else if (kind === "activate") {
+        msg("pc-msg", "", tx("js.tunnel_wird_umgestellt_und_getestet"));
+        const r = await api("POST", "/api/vpn/activate", { id });
+        const v = renderProtonTest(r); msg("pc-msg", v.kind, v.html);
+      } else if (kind === "delete") {
+        await api("POST", "/api/vpn/profile/delete", { id });
+        msg("pc-msg", "ok", tx("js.profil_geloscht"));
+        if ($("vp-id").value === id) vpClose();
+      }
+    } catch (e) { msg("pc-msg", "err", esc(e.message)); }
+    refresh();
+  });
+});
+$("le-on").addEventListener("change", async (ev) => {
+  const on = ev.target.checked; ev.target.disabled = true;
+  try {
+    await api("POST", "/api/lan-entry", { enabled: on });
+    msg("le-msg", "ok", on ? tx("js.lan_eingang_eingeschaltet") : tx("js.lan_eingang_ausgeschaltet"));
+  } catch (e) { msg("le-msg", "err", esc(e.message)); }
+  ev.target.disabled = false; refresh();
+});
+$("fo-save").addEventListener("click", (ev) => busy(ev.target, async () => {
+  try {
+    await api("POST", "/api/vpn/failover", { fails: Number($("fo-fails").value || 2),
+      hold: Math.round(Number($("fo-hold").value || 0) * 60), standby: $("fo-standby").checked,
+      rotate: $("fo-rotate").value, rotate_at: $("fo-at").value.trim(), rotate_hours: Number($("fo-hours").value || 24) });
+    msg("pc-msg", "ok", tx("js.failover_gespeichert"));
+  } catch (e) { msg("pc-msg", "err", esc(e.message)); }
+}));
+
+boot();
+</script>
+</body>
+</html>

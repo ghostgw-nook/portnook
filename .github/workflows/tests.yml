@@ -1,0 +1,77 @@
+# Tests. Called by auto-merge.yml (claude/**) and dependabot-auto-merge.yml before a merge; also runs on
+# pull requests. unit: Python unit tests of agent/; images: build the agent image and smoke-check it;
+# e2e: agent + TLS backend + pebble (ACME) + fake myaddr.tools/NPM on the runner (.github/scripts/e2e.sh), and
+# VPN failover with two WireGuard peers (.github/scripts/e2e-vpn.sh).
+name: Tests
+
+on:
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Unit tests agent
+        working-directory: agent
+        run: python -m unittest discover -s tests -t .
+
+  images:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Build agent image
+        uses: docker/build-push-action@v7
+        with:
+          context: agent
+          load: true
+          platforms: linux/amd64
+          tags: portnook:ci
+          cache-from: type=gha,scope=agent-amd64
+          cache-to: type=gha,scope=agent-amd64,mode=max
+
+      - name: Smoke checks
+        run: |
+          set -euo pipefail
+          echo "== agent: libnatpmp provides natpmpc"
+          docker run --rm --entrypoint apk portnook:ci info -L libnatpmp | tee /dev/stderr | grep -q natpmpc
+          echo "== agent: openssl, ssh-keygen, examples"
+          docker run --rm --entrypoint sh portnook:ci -c 'openssl version && command -v ssh-keygen && ls /app/examples'
+          echo "== python package imports (WORKDIR /app)"
+          docker run --rm --entrypoint python3 portnook:ci -c 'import app'
+
+  e2e:
+    needs: images
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Build agent image
+        uses: docker/build-push-action@v7
+        with:
+          context: agent
+          load: true
+          platforms: linux/amd64
+          tags: portnook:ci
+          cache-from: type=gha,scope=agent-amd64
+
+      - name: End-to-end test (ACME with pebble, delivery, redirect script)
+        run: .github/scripts/e2e.sh
+
+      - name: End-to-end test (VPN profiles, failover with two WireGuard peers)
+        run: .github/scripts/e2e-vpn.sh

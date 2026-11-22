@@ -1,0 +1,15 @@
+# Dependabot: weekly update PRs. Patch and minor updates are merged automatically after the tests
+# (dependabot-auto-merge.yml, patch bump of VERSION, release, build); major updates are reviewed by hand.
+# Python is standard library only (no package manifests), so only actions and the base image are tracked.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly, day: monday }
+    groups:
+      actions-minor-and-patch: { update-types: [minor, patch] }
+  - package-ecosystem: docker
+    directory: /agent
+    schedule: { interval: weekly, day: monday }
+    groups:
+      docker-agent-minor-and-patch: { update-types: [minor, patch] }

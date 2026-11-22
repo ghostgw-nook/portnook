@@ -1,0 +1,28 @@
+services:
+  portnook:
+    image: ghcr.io/ghostgw-nook/portnook:latest
+    build: .
+    container_name: portnook
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-Europe/Zurich}  # time zone for the VPN rotation schedule
+    cap_add:
+      - NET_ADMIN
+    sysctls:
+      - net.ipv4.conf.all.src_valid_mark=1
+      - net.ipv4.ip_forward=1
+      - net.ipv6.conf.all.disable_ipv6=1
+    ports:
+      # Default: UI only on the Docker host itself. For access from the LAN set
+      # PF_BIND=<LAN-IP of the Docker host> (e.g. PF_BIND=192.168.1.20) in a .env file next to this file.
+      - "${PF_BIND:-127.0.0.1}:8090:8090"
+    labels:
+      # Watchtower: no automatic restarts. Each restart builds wg0 anew; Proton may then hand out another
+      # forwarded port (portnook asks for the last one again, but Proton decides). Update by hand instead
+      # (docker compose pull && docker compose up -d). Alternative: only report new images:
+      # com.centurylinklabs.watchtower.monitor-only: "true"
+      com.centurylinklabs.watchtower.enable: "false"
+    volumes:
+      - ./data:/data
+      # Optional: certificate folder of Zoraxy (conf/certs), enter /zoraxy-certs in the UI under "Zertifikat"
+      # - /path/to/zoraxy/config/conf/certs:/zoraxy-certs

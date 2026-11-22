@@ -1,0 +1,34 @@
+<?xml version="1.0"?>
+<!--
+  Unraid template for portnook (Docker tab, without the Compose Manager plugin).
+  Install: copy this file to /boot/config/plugins/dockerMan/templates-user/my-portnook.xml, then
+  Docker -> Add Container -> Template: portnook. See docs/installation.md,
+  section "Agent auf Unraid mit Vorlage".
+-->
+<Container version="2">
+  <Name>portnook</Name>
+  <Repository>ghcr.io/ghostgw-nook/portnook:latest</Repository>
+  <Registry>https://github.com/ghostgw-nook/portnook/pkgs/container/portnook</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/ghostgw-nook/portnook/issues</Support>
+  <Project>https://github.com/ghostgw-nook/portnook</Project>
+  <Overview>WireGuard tunnel to Proton VPN (NAT-PMP) or a VPN with fixed ports, forwards the port to your reverse proxy, keeps a myaddr.tools name on the exit IP, gets a Let's Encrypt wildcard certificate and hands it to Nginx Proxy Manager or Zoraxy. No open port on your router. Set up in the browser.[br][br]Network: "bridge" is enough. For the LAN entry (same URL at home, without the VPN) choose "Custom: br0" with a fixed IP; the port mapping is then not used and the web UI is at that IP on port 8090.</Overview>
+  <Category>Network:VPN Network:Proxy Tools:</Category>
+  <WebUI>http://[IP]:[PORT:8090]/</WebUI>
+  <TemplateURL/>
+  <Icon>https://raw.githubusercontent.com/ghostgw-nook/portnook/main/docs/images/logo/portnook-icon.png</Icon>
+  <ExtraParams>--cap-add=NET_ADMIN --sysctl net.ipv4.conf.all.src_valid_mark=1 --sysctl net.ipv4.ip_forward=1 --sysctl net.ipv6.conf.all.disable_ipv6=1 --label com.centurylinklabs.watchtower.enable=false</ExtraParams>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled/>
+  <DonateText/>
+  <DonateLink/>
+  <Requires>A VPN with port forwarding and a reverse proxy in the LAN.</Requires>
+  <Config Name="Web UI port" Target="8090" Default="8090" Mode="tcp" Description="Port of the web UI (only used with network bridge)." Type="Port" Display="always" Required="true" Mask="false">8090</Config>
+  <Config Name="Data" Target="/data" Default="/mnt/user/appdata/portnook" Mode="rw" Description="Settings, keys and certificates (contains secrets, back it up)." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/portnook</Config>
+  <Config Name="Zoraxy certificates" Target="/zoraxy-certs" Default="" Mode="rw" Description="Optional: certificate folder of Zoraxy (…/zoraxy/config/conf/certs). In portnook enter /zoraxy-certs as Zoraxy folder. Leave empty without Zoraxy." Type="Path" Display="always" Required="false" Mask="false"></Config>
+  <Config Name="Time zone" Target="TZ" Default="Europe/Zurich" Mode="" Description="Time zone for the VPN rotation schedule." Type="Variable" Display="advanced" Required="false" Mask="false">Europe/Zurich</Config>
+</Container>

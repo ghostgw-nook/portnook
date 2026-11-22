@@ -1,0 +1,31 @@
+# portnook on Unraid (Docker Compose Manager plugin). Same as docker-compose.yml, but with the data in appdata
+# and Unraid labels (icon, WebUI link). Set PF_BIND to the LAN IP of the Unraid server (env file of the stack
+# or directly in the ports line).
+services:
+  portnook:
+    image: ghcr.io/ghostgw-nook/portnook:latest
+    container_name: portnook
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-Europe/Zurich}  # time zone for the VPN rotation schedule
+    cap_add:
+      - NET_ADMIN
+    sysctls:
+      - net.ipv4.conf.all.src_valid_mark=1
+      - net.ipv4.ip_forward=1
+      - net.ipv6.conf.all.disable_ipv6=1
+    ports:
+      - "${PF_BIND:-127.0.0.1}:8090:8090"
+    volumes:
+      - /mnt/user/appdata/portnook:/data
+      # Optional: Zoraxy certificate folder (Zoraxy container: /opt/zoraxy/config -> appdata/zoraxy/config).
+      # In the portnook UI under "Zertifikat" enter /zoraxy-certs as Zoraxy folder.
+      # - /mnt/user/appdata/zoraxy/config/conf/certs:/zoraxy-certs
+    labels:
+      net.unraid.docker.managed: composeman
+      net.unraid.docker.icon: https://raw.githubusercontent.com/ghostgw-nook/portnook/main/docs/images/logo/portnook-icon.png
+      net.unraid.docker.webui: http://[IP]:[PORT:8090]/
+      # Watchtower: no automatic restarts, a restart can change the Proton port (portnook asks for the last
+      # port again, Proton decides). Update by hand (Compose Pull + Compose Up). Instead of "false" you can set
+      # com.centurylinklabs.watchtower.monitor-only: "true" (Watchtower only reports new images).
+      com.centurylinklabs.watchtower.enable: "false"

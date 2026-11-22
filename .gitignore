@@ -1,0 +1,6 @@
+**/data/
+*.key
+*.pem
+*.conf.local
+.env
+__pycache__/
