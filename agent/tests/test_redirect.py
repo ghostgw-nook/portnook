@@ -191,6 +191,18 @@ class RedirectAgentTest(unittest.TestCase):
         with self.assertRaises(ValidationError):  # no SSH key yet
             self.r.run_test(gen)
 
+    def test_set_once_after_start(self):
+        """0.27.13 (owner): after a start the redirect is set once even if the stored target is the same."""
+        marker = os.path.join(self.tmp, "runs")
+        self.r.set_config({"provider": "script", "entry_host": "start.example.ch", "script": "echo x >> %s\n" % marker})
+        self.assertTrue(self.r.tick()["ok"])
+        self.assertEqual(self.r.tick()["skipped"], "aktuell")
+        self.r.rt.pop("set_since_start")  # as after a restart: same target stored
+        self.assertTrue(self.r.tick()["ok"])
+        self.assertEqual(self.r.tick()["skipped"], "aktuell")
+        with open(marker) as f:
+            self.assertEqual(len(f.read().split()), 2)
+
     def test_script_failure_and_retry(self):
         self.r.set_config({"provider": "script", "entry_host": "start.example.ch", "script": "echo boom; exit 3\n"})
         res = self.r.tick()

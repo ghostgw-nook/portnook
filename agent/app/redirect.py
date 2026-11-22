@@ -486,7 +486,10 @@ class Redirect:
                 return {"ok": False, "skipped": "Ziel unbekannt (Port, Name oder IP fehlt)"}
             now = int(self.clock())
             rules = json.dumps(self.mappings(cfg, tgt))
-            if not force and ((tgt["url"] == cfg.get("last_target") and rules == cfg.get("last_rules", rules))
+            # 0.27.13 (owner): set the redirect once after every start, even if the stored target is the same, so
+            # the entry host is surely right after an update or restart (one script run / Cloudflare call)
+            fresh = not self.rt.get("set_since_start")  # a failed run still waits for RETRY
+            if not force and ((not fresh and tgt["url"] == cfg.get("last_target") and rules == cfg.get("last_rules", rules))
                               or now < self.rt["next_try"]):
                 return {"ok": True, "skipped": "aktuell"}
             if not self.may_run(provider):
@@ -516,6 +519,7 @@ class Redirect:
                     detail = "Skript ok"
                 upd.update({"last_target": tgt["url"], "last_rules": rules, "last_ok": now, "last_error": "", "last_detail": detail})
                 self.rt["next_try"] = 0
+                self.rt["set_since_start"] = True
                 log("redirect %s -> %s (%s)", cfg.get("entry_host"), tgt["url"], detail)
                 result = {"ok": True, "target": tgt["url"], "detail": detail}
             except (RedirectError, SetupError, myaddr.MyaddrError) as err:
