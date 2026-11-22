@@ -217,6 +217,8 @@ class Net:
         """ip rules (priority, selector) for the tunnels in ``tunnels`` with ``active`` carrying the traffic.
 
         * the WireGuard sockets (their fwmark) use the main table, i.e. eth0;
+        * direct push sockets (``PUSH_FWMARK``, bound to eth0) use the main table too (0.27.4): without this rule
+          they ended in the tunnel table, which has no eth0 route ("Host is unreachable" while a tunnel ran);
         * replies of connections that came in through a tunnel go back through it (connmark restored on
           eth0 -> fwmark), before the main table: both tunnels may have the same address/subnet;
         * LAN routes of the main table win (backend, LAN clients), never its default route;
@@ -227,6 +229,8 @@ class Net:
         rules = []
         for i, t in enumerate(tunnels):
             rules.append((RULE_PRIO + i, ["fwmark", TUNNEL_FWMARK[t], "lookup", "main"]))
+        if tunnels:
+            rules.append((RULE_PRIO + 4, ["fwmark", PUSH_FWMARK, "lookup", "main"]))
         for i, t in enumerate(tunnels):
             rules.append((RULE_PRIO + 5 + i, ["fwmark", TUNNEL_CONNMARK[t], "lookup", str(TUNNEL_TABLE[t])]))
         if tunnels:
