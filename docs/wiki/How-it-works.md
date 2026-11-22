@@ -2,6 +2,12 @@
 
 > **Applies to:** portnook 0.27 (rc1) · [Versions](Versions)
 
+*Deutsch: [So funktioniert es](So-funktioniert-es)*
+
+![How portnook works](https://raw.githubusercontent.com/ghostgw-nook/portnook/main/docs/images/how-it-works.svg)
+
+The same path as text:
+
 ```
 Visitor ──https://app.<name>.myaddr.tools:<port>──> VPN exit IP:<port>
                                                    │ WireGuard (wg0), built from home
@@ -9,7 +15,7 @@ Visitor ──https://app.<name>.myaddr.tools:<port>──> VPN exit IP:<port>
                                                    │ forwards only the VPN port
                                             Reverse proxy (NPM, Zoraxy, …) :443 or own port
                                                    │ TLS ends here
-                                            Media server
+                                            Web service
 ```
 
 ## The parts

@@ -1,7 +1,7 @@
 **portnook**
 
 - [Home](Home)
-- [How it works](How-it-works)
+- [How it works](How-it-works) · [Deutsch](So-funktioniert-es)
 - [Installation](Installation)
 
 **Reverse proxy**
