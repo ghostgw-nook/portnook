@@ -335,6 +335,21 @@ class StandbyFlowTest(unittest.TestCase):
         self.fo.save_profile({"id": "p2", "enabled": True})  # switching one on again moves nothing either
         self.assertEqual(self.agent.active_profile()["id"], running)
 
+    def test_restart_with_switched_off_stored_profile(self):
+        """0.27.11 (owner): stored active profile switched off before a restart: the top one runs and is stored;
+        the "active" profile never turns into the standby's profile."""
+        self.fo.store_profile({"name": "Proton IT", "conf": PROTON_SAMPLE})
+        self.apply()
+        st = self.agent.store.get()
+        self.agent.store.update("proton", {"active": "p2", "profiles": [dict(p, enabled=p["id"] != "p2")
+                                                                       for p in st["proton"]["profiles"]]})
+        self.apply()
+        self.agent.standby.cycle()
+        self.assertEqual(self.agent.store.get()["proton"]["active"], "p1")
+        self.assertEqual(self.agent.active_profile()["id"], "p1")
+        self.assertEqual(self.agent.standby.state["profile"], "p3")
+        self.assertEqual(self.agent.active_profile()["id"], "p1")  # still, with the standby running
+
     def test_name_without_free_tunnel_keeps_record(self):
         """0.27.8: two tunnels, one shared name: it serves the active tunnel, the standby has no name."""
         self.apply()

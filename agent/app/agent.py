@@ -140,14 +140,15 @@ class Agent:
         return profs
 
     def active_profile(self, st=None):
-        """The profile wg0 runs with: the stored active one if enabled, else the running standby (0.27.9: no
-        jump to the top of the list), else the first enabled one."""
+        """The profile wg0 runs with: the stored active one if enabled, else the first enabled one.
+        0.27.11: this must not depend on the standby (0.27.9 preferred the standby here, so after a restart with a
+        switched-off stored profile the "active" one turned into the standby's profile while wg0 ran another).
+        ``_apply`` stores the fallback, so it stays fixed."""
         st = st or self.store.get()
         usable = [x for x in self.profiles(st) if x.get("conf") and x.get("enabled", True)]
-        for want in (st["proton"].get("active"), (getattr(self, "standby", None) and self.standby.state.get("profile"))):
-            for x in usable:
-                if want and x["id"] == want:
-                    return x
+        for x in usable:
+            if x["id"] == st["proton"].get("active"):
+                return x
         return usable[0] if usable else None
 
     def _proton_on(self, st=None):
@@ -222,6 +223,10 @@ class Agent:
         self._firewall(st, bip, bport)
         if proton_on:
             prof = self.active_profile(st)
+            if st["proton"].get("active") != prof["id"]:
+                # 0.27.11: store the fallback (stored one switched off or missing), so it never moves afterwards
+                self.store.update("proton", {"active": prof["id"]})
+                log("active profile stored: %s '%s'", prof["id"], prof.get("name", ""))
             conf = protonconf.with_mtu(prof["conf"], protonconf.profile_mtu(prof)[1])  # 0.10.3: MTU per profile
             digest = hashlib.sha256(conf.encode()).hexdigest()
             if digest != self._proton_applied or not self.net.link_exists(self.active_if):
