@@ -304,6 +304,37 @@ class StandbyFlowTest(unittest.TestCase):
         self.assertEqual(self.agent.active_profile()["id"], sb)
         self.assertEqual(self.agent.redirect.active_name(), "muster-b.myaddr.tools")
 
+    def test_switching_off_active_promotes_standby(self):
+        """0.27.9 (owner): switching off the running profile hands over to the ready standby, not to the top one."""
+        self.fo.store_profile({"name": "Proton IT", "conf": PROTON_SAMPLE})
+        self.apply()
+        self.agent.standby.cycle()
+        self.fo.activate("p3", "manual")  # p3 runs, the standby is the top one that is not active
+        self.agent.standby.cycle()
+        sb = self.agent.standby.state["profile"]
+        self.assertNotEqual(sb, "p3")
+        self.fo.save_profile({"id": "p3", "enabled": False})
+        self.assertEqual(self.agent.active_profile()["id"], sb)  # the standby took over
+        self.assertEqual(self.agent.store.get()["proton"]["active"], sb)
+        self.assertIn("ausgeschaltet", self.fo.status()["events"][0]["text"])
+
+    def test_order_change_never_moves_the_running_profile(self):
+        """0.27.9 (owner log): with the stored active profile switched off, every change of the order rebuilt wg0
+        with the new top profile. Now the running profile is stored and stays; the order only picks the standby."""
+        self.fo.store_profile({"name": "Proton IT", "conf": PROTON_SAMPLE})
+        self.apply()
+        self.agent.standby.cycle()
+        self.fo.activate("p2", "manual")
+        self.agent.standby.cycle()
+        self.fo.save_profile({"id": "p2", "enabled": False})  # the running one off: the standby takes over
+        running = self.agent.active_profile()["id"]
+        self.assertEqual(self.agent.store.get()["proton"]["active"], running)
+        for order in (["p3", "p1", "p2"], ["p1", "p3", "p2"], ["p2", "p3", "p1"]):
+            self.fo.set_order(order)
+            self.assertEqual(self.agent.active_profile()["id"], running)
+        self.fo.save_profile({"id": "p2", "enabled": True})  # switching one on again moves nothing either
+        self.assertEqual(self.agent.active_profile()["id"], running)
+
     def test_name_without_free_tunnel_keeps_record(self):
         """0.27.8: two tunnels, one shared name: it serves the active tunnel, the standby has no name."""
         self.apply()

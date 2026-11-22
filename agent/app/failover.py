@@ -160,6 +160,7 @@ class Failover:
 
     def save_profile(self, body):
         """API: store a profile; rebuild wg0 if the running profile changed or got a new config or MTU."""
+        self.pin_active()
         act = self.agent.active_profile() or {}
         before, before_mtu = act.get("id"), protonconf.profile_mtu(act)[1]
         prof, summary = self.store_profile(body)
@@ -167,6 +168,11 @@ class Failover:
         out = {"ok": True, "profile": self._public(prof)}
         if not self.agent._proton_on():
             return out
+        if after["id"] != before:
+            res = self._standby_takes_over(act, "Profil '%s' ausgeschaltet" % act.get("name", "-"))
+            if res:
+                out.update(res)
+                return out
         if after["id"] != before or (after["id"] == prof["id"] and (
                 body.get("conf") or protonconf.profile_mtu(prof)[1] != before_mtu)):
             out.update(self.agent.start_profile(after, summary if after["id"] == prof["id"] else None))
@@ -176,6 +182,7 @@ class Failover:
         return out
 
     def delete_profile(self, pid):
+        self.pin_active()
         with self.lock:
             profs = self._profiles()
             prof = next((p for p in profs if p["id"] == pid), None)
@@ -186,12 +193,26 @@ class Failover:
             self._save(profs)
         log("vpn profile %s '%s' deleted", pid, prof["name"])
         if was_active:
+            res = self._standby_takes_over(prof, "Profil '%s' gelöscht" % prof["name"])
+            if res:
+                return dict(res, deleted=pid)
             nxt = self.agent.active_profile()
             if nxt and self.agent._proton_on():
                 self.event("Profil '%s' gelöscht, weiter mit '%s'" % (prof["name"], nxt["name"]))
                 return dict(self.agent.start_profile(nxt), deleted=pid)
         self.agent.apply_network()  # 0.22.0: also when the standby was deleted, the next one comes up
         return {"ok": True, "deleted": pid}
+
+    def _standby_takes_over(self, prev, why):
+        """The running profile was switched off or deleted (0.27.9, owner): the ready standby becomes the active
+        tunnel, as on a failover, instead of rebuilding wg0 with the top profile of the list (no jump up, the
+        list order stays the priority for the next standby). ``None`` if there is no ready standby."""
+        sb = self.agent.standby.state.get("profile")
+        usable = {p["id"] for p in self.agent.profiles(self.agent.store.get()) if p.get("conf") and p.get("enabled", True)}
+        if not sb or sb == (prev or {}).get("id") or sb not in usable or not self.agent.standby.health()[0]:
+            return None
+        res = self._promoted(prev, why)
+        return res if res.get("ok") else None
 
     def set_active(self, pid):
         """Store ``pid`` as the active profile; the list order (priority) stays as it is (0.24.0)."""
@@ -201,7 +222,18 @@ class Failover:
                 self._save(self._profiles(st))
             self.agent.store.update("proton", {"active": pid})
 
+    def pin_active(self):
+        """Store the profile that really runs as the active one (0.27.9). Before, a switched-off active profile
+        stayed stored, so the running one was "the first enabled one" and moved with every change of the list
+        order or of another profile (the owner saw it jump to the top)."""
+        with self.lock:
+            st = self.agent.store.get()
+            act = (self.agent.active_profile(st) or {}).get("id")
+            if act and st["proton"].get("active") != act:
+                self.set_active(act)
+
     def set_order(self, ids):
+        self.pin_active()  # the order is the priority of the standby, it never moves the running profile
         with self.lock:
             profs = self._profiles()
             if not isinstance(ids, list) or sorted(map(str, ids)) != sorted(p["id"] for p in profs):

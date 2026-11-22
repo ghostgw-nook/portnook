@@ -140,12 +140,14 @@ class Agent:
         return profs
 
     def active_profile(self, st=None):
-        """The profile wg0 runs with: the stored active one if enabled, else the first enabled one."""
+        """The profile wg0 runs with: the stored active one if enabled, else the running standby (0.27.9: no
+        jump to the top of the list), else the first enabled one."""
         st = st or self.store.get()
         usable = [x for x in self.profiles(st) if x.get("conf") and x.get("enabled", True)]
-        for x in usable:
-            if x["id"] == st["proton"].get("active"):
-                return x
+        for want in (st["proton"].get("active"), (getattr(self, "standby", None) and self.standby.state.get("profile"))):
+            for x in usable:
+                if want and x["id"] == want:
+                    return x
         return usable[0] if usable else None
 
     def _proton_on(self, st=None):
@@ -611,6 +613,8 @@ class Agent:
 
     def start_profile(self, prof, summary=None):
         """(Re)build wg0 with the active profile and test it."""
+        if self.store.get()["proton"].get("active") != prof.get("id"):
+            self.failover.set_active(prof["id"])  # 0.27.9: what runs is stored, a later change never moves it
         summary = summary or {"server": prof.get("server"), "endpoint": prof.get("endpoint"),
                               "natpmp_hint": prof.get("natpmp_hint"), "removed": []}
         self.forward_port = 0
