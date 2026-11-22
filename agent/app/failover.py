@@ -36,6 +36,7 @@ VERIFY_TIMEOUT = 300  # after a switch: DNS and rewrite must follow within this 
 FAST_RECHECK = 5  # seconds between checks while a profile is failing or a switch is being verified
 MAX_PROFILES = 8
 HANDSHAKE_FRESH = 180
+START_GRACE = 45  # 0.27.12 (owner log): a tunnel just built has no handshake/NAT-PMP yet, that is no failure
 EVENTS = 50
 NAME_MAX = 40
 
@@ -400,6 +401,12 @@ class Failover:
                         self.activate(act["id"], "Rotation: '%s' gestört, zurück" % nxt["name"])
                     return "rotated"
                 return "ok"
+            since = int(a.rt.get("tunnel_built") or 0)
+            if since and now - since < START_GRACE:
+                # right after start or a rebuild: wait instead of counting (two checks in 5 s switched away
+                # from a working profile before its first handshake)
+                self.rt["reason"] = reason
+                return "starting"
             self.rt["fails"] += 1
             self.rt["reason"] = reason
             self.rt["healthy"] = False

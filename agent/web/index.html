@@ -590,7 +590,12 @@ h3 { font-size: 14px; margin: 16px 0 4px; }
   <h2 class="sec">{{ui.log}}</h2>
   <p class="lead">{{lead.log}}</p>
   <div class="card">
-    <label class="inline"><input type="checkbox" id="log-follow" checked> {{log.auto_scroll}}</label>
+    <div class="actions">
+      <label class="inline"><input type="checkbox" id="log-follow" checked> {{log.auto_scroll}}</label>
+      <button type="button" id="log-copy">{{log.kopieren}}</button>
+      <button type="button" id="log-save">{{log.herunterladen}}</button>
+      <span id="log-msg" class="muted"></span>
+    </div>
     <pre class="log" id="log"></pre>
   </div>
 </section>
@@ -1113,8 +1118,27 @@ async function refresh() {
   dot("d-cert", worst); $("s-cert").innerHTML = dl(certRows(st.cert).concat(st.cert.present ? delRows(st.delivery) : []));
   dot("d-redirect", lk("redirect")); $("s-redirect").innerHTML = dl(redirectRows(st.redirect));
   try { const l = await api("GET", "/api/logs"); const el = $("log");
+    // 0.27.12 (owner): no refresh while text in the log is selected, else the selection is lost every 5 s
+    const sel = window.getSelection && window.getSelection();
+    if (sel && !sel.isCollapsed && el.contains(sel.anchorNode)) return;
     el.textContent = l.lines.join("\n"); followLog(); } catch (err) {}
 }
+
+// 0.27.12 (owner): copy or download the whole log; the clipboard API needs https, so http uses a textarea
+$("log-copy").addEventListener("click", () => {
+  const text = $("log").textContent;
+  const done = () => { $("log-msg").textContent = tx("log.kopiert"); setTimeout(() => { $("log-msg").textContent = ""; }, 3000); };
+  if (navigator.clipboard && window.isSecureContext) { navigator.clipboard.writeText(text).then(done).catch(() => {}); return; }
+  const ta = document.createElement("textarea"); ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand("copy"); done(); } catch (e) {} finally { ta.remove(); }
+});
+$("log-save").addEventListener("click", () => {
+  const url = URL.createObjectURL(new Blob([$("log").textContent + "\n"], { type: "text/plain" }));
+  const a = document.createElement("a"); a.href = url;
+  a.download = "portnook-log-" + new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-") + ".txt";
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+});
 
 function actionMsg(btn) {
   const sec = btn.closest("section").id;

@@ -350,6 +350,17 @@ class StandbyFlowTest(unittest.TestCase):
         self.assertEqual(self.agent.standby.state["profile"], "p3")
         self.assertEqual(self.agent.active_profile()["id"], "p1")  # still, with the standby running
 
+    def test_no_failover_right_after_start(self):
+        """0.27.12 (owner log): two checks within 5 s after the start switched away before the first handshake."""
+        self.apply()
+        self.agent.standby.cycle()
+        self.fo.health = lambda st=None: (False, "kein frischer Handshake")
+        self.fo.set_settings({"fails": 2, "prefer_primary": False, "hold": 600})
+        self.assertEqual([self.fo.tick() for _ in range(3)], ["starting"] * 3)
+        self.assertEqual(self.agent.active_profile()["id"], "p1")
+        self.now[0] += 60  # still broken after the grace: now it counts
+        self.assertEqual(self.fo.tick(), "failing")
+
     def test_name_without_free_tunnel_keeps_record(self):
         """0.27.8: two tunnels, one shared name: it serves the active tunnel, the standby has no name."""
         self.apply()

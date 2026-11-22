@@ -164,7 +164,7 @@ class NotifyTest(unittest.TestCase):
             "ok": healthy[prof["id"]], "test": {"ok": healthy[prof["id"]], "exit_ip": "198.51.100.2", "error": ""}}
         fo.health = lambda st=None: (healthy[self.agent.active_profile()["id"]], "kein frischer Handshake")
         fo.set_settings({"fails": 1, "prefer_primary": False, "hold": 600})
-        self.now[0] += 30
+        self.now[0] += 60  # after the start grace of the tunnel (0.27.12)
         self.assertEqual(fo.tick(), "switched")
         healthy["p2"] = False
         self.now[0] += 30

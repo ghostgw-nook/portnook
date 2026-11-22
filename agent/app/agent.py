@@ -236,6 +236,7 @@ class Agent:
                     self.net.tunnel_down(self.active_if)  # another profile (failover) or a new config
                 self.net.tunnel_up(self.active_if, conf)
                 self._proton_applied = digest
+                self.rt["tunnel_built"] = int(self.clock())  # 0.27.12: failover grace (no handshake yet)
                 log("%s mtu %d (profile %s, setting %s)", self.active_if, protonconf.profile_mtu(prof)[1],
                     prof.get("id"), protonconf.profile_mtu(prof)[0])
             try:

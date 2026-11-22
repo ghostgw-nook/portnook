@@ -466,5 +466,8 @@
  "wizard.zum_status": "To the status",
  "js.vor_nach": " ago",
  "js.aktuell": "Current",
- "js.wird_gemessen": "measuring …"
+ "js.wird_gemessen": "measuring …",
+ "log.kopieren": "Copy log",
+ "log.herunterladen": "Save as file",
+ "log.kopiert": "Copied to the clipboard"
 }
