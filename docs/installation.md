@@ -80,6 +80,10 @@ Sie setzt dasselbe wie die Compose-Datei: `NET_ADMIN`, die drei `sysctl`, das Wa
    `/mnt/user/appdata/zoraxy/conf/certs`), ohne Zoraxy den Vorschlag lassen. **Apply**, danach das WebUI über
    das Icon öffnen.
 
+Ein ausgefülltes Beispiel, so wie Unraid die Vorlage nach **Apply** speichert (Netzwerk `br0` mit fester IP
+für den LAN-Eingang, Zoraxy-Ordner gesetzt): [`agent/unraid/portnook-br0-zoraxy.example.xml`](../agent/unraid/portnook-br0-zoraxy.example.xml).
+Als Vergleich nutzen oder als `my-portnook.xml` speichern und vor **Apply** die IP anpassen.
+
 Updates: im Docker-Tab **Check for Updates** und **Apply update** (nicht automatisch, siehe
 [Updates](#10-updates-und-umstieg-von-08)). 
 

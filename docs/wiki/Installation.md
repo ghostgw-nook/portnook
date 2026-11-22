@@ -46,6 +46,10 @@ file, set `PF_BIND` to the Unraid LAN IP, **Compose Up**. Data lives in `/mnt/us
 
 The template sets `NET_ADMIN`, the sysctls and the Watchtower label for you.
 
+A filled-in example as Unraid saves it after **Apply** (network `br0` with a fixed IP for the LAN entry, Zoraxy
+folder set): [`agent/unraid/portnook-br0-zoraxy.example.xml`](https://github.com/ghostgw-nook/portnook/blob/main/agent/unraid/portnook-br0-zoraxy.example.xml).
+Use it as a reference, or save it as `my-portnook.xml` and change the IP before **Apply**.
+
 For the [LAN entry](Home-network-and-LAN-entry) the container needs its own LAN IP (network "Custom: br0" with a
 fixed IP) instead of the bridge network.
 

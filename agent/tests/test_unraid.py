@@ -42,6 +42,17 @@ class UnraidTemplateTest(unittest.TestCase):
         self.assertEqual(self.root.findtext("TemplateURL"),
                          "https://raw.githubusercontent.com/ghostgw-nook/portnook/main/agent/unraid/portnook.xml")
 
+    def test_example_br0_zoraxy(self):
+        # filled-in example as Unraid saves it: LAN entry on br0 with a fixed IP and the Zoraxy folder
+        ex = ET.parse(AGENT / "unraid" / "portnook-br0-zoraxy.example.xml").getroot()
+        self.assertEqual(ex.findtext("Repository"), self.root.findtext("Repository"))
+        self.assertEqual(ex.findtext("ExtraParams"), self.root.findtext("ExtraParams"))
+        self.assertEqual(ex.findtext("Network"), "br0")
+        self.assertTrue(ex.findtext("MyIP").startswith("192.168.1."))
+        self.assertFalse(ex.findtext("DateInstalled"))
+        paths = {c.get("Target"): c.text for c in ex.iter("Config") if c.get("Type") == "Path"}
+        self.assertEqual(paths["/zoraxy-certs"], "/mnt/user/appdata/zoraxy/conf/certs")
+
 
 if __name__ == "__main__":
     unittest.main()
