@@ -14,7 +14,8 @@ import time
 HOST = "speed.cloudflare.com"
 SECONDS = 6          # per direction
 STREAMS = 4          # parallel connections
-REQUEST_BYTES = 100 * 1000 * 1000  # per download request / upload body; requests repeat until the time is up
+DOWN_BYTES = 50 * 1000 * 1000   # per download request; the server answers 403 above about 50-100 MB
+UP_BYTES = 100 * 1000 * 1000    # per upload body; requests repeat until the time is up
 CHUNK = 256 * 1024
 SO_BINDTODEVICE = getattr(socket, "SO_BINDTODEVICE", 25)
 
@@ -59,7 +60,7 @@ def _download(ip, iface, deadline, counter, errors, clock):
             sock = _connect(ip, iface, 10)
             try:
                 sock.sendall(("GET /__down?bytes=%d HTTP/1.1\r\nHost: %s\r\nUser-Agent: portnook\r\n"
-                              "Connection: close\r\n\r\n" % (REQUEST_BYTES, HOST)).encode())
+                              "Connection: close\r\n\r\n" % (DOWN_BYTES, HOST)).encode())
                 counter.add(len(_head(sock)))
                 while clock() < deadline:
                     n = sock.recv_into(view)
@@ -80,10 +81,10 @@ def _upload(ip, iface, deadline, counter, errors, clock):
             try:
                 sock.sendall(("POST /__up HTTP/1.1\r\nHost: %s\r\nUser-Agent: portnook\r\nContent-Type: "
                               "application/octet-stream\r\nContent-Length: %d\r\nConnection: close\r\n\r\n"
-                              % (HOST, REQUEST_BYTES)).encode())
+                              % (HOST, UP_BYTES)).encode())
                 sent = 0
-                while sent < REQUEST_BYTES and clock() < deadline:
-                    part = block[:min(CHUNK, REQUEST_BYTES - sent)]
+                while sent < UP_BYTES and clock() < deadline:
+                    part = block[:min(CHUNK, UP_BYTES - sent)]
                     sock.sendall(part)
                     sent += len(part)
                     counter.add(len(part))
