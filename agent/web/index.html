@@ -78,6 +78,9 @@ button:disabled { opacity: .55; cursor: progress; }
 .steps li.cur { color: var(--accent-fg); background: var(--accent); border-color: var(--accent); }
 .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
 .grid .card { margin-bottom: 0; }
+/* status page (0.27.5, owner): five cards in two rows (3 + 2) so they get more room */
+.grid.status { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 1100px) { .grid.status { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); } }
 dl { display: grid; grid-template-columns: max-content 1fr; gap: 3px 12px; margin: 0; font-size: 14px; }
 dt { color: var(--muted); }
 dd { margin: 0; overflow-wrap: anywhere; }
@@ -238,7 +241,7 @@ h3 { font-size: 14px; margin: 16px 0 4px; }
   <div class="phead"><h1>{{ui.ubersicht}}</h1></div>
   <p class="lead">{{lead.status}}</p>
   <div class="card"><div class="lights" id="s-lights"></div></div>
-  <div class="grid">
+  <div class="grid status">
     <div class="card"><h2><span class="dot" id="d-proton"></span>{{ui.vpn}}</h2><div id="s-proton"></div></div>
     <div class="card"><h2><span class="dot" id="d-backend"></span>{{status.backend}}</h2><dl id="s-backend"></dl></div>
     <div class="card"><h2><span class="dot" id="d-ddns"></span>{{status.ddns_myaddr_tools}}</h2><div id="s-ddns"></div></div>
