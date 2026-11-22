@@ -95,6 +95,8 @@ api POST /api/cert/settings '{"staging":false,"delay":2,"tos":true,"auto":true,"
 api POST /api/action/cert-issue '{}' >/dev/null
 for ((i = 0; i < 60; i++)); do api GET /api/status | grep -q '"present": true' && break; sleep 2; done
 api GET /api/status | grep -q '"present": true' || { echo "no certificate"; exit 1; }
+# no automatic follow-up order for the names added below: it races the fake DNS and leaves an ACME error on the shots
+api POST /api/cert/settings '{"staging":false,"delay":2,"tos":true,"auto":false,"email":"admin@example.ch"}' >/dev/null
 SCRIPT='# Beispiel: hier stuende z. B. ssh ... (siehe Beispiel-Skripte)
 echo "Redirect gesetzt ($PF_STATUS_CODE):"
 echo "$PF_RULES"'
