@@ -464,5 +464,7 @@
  "wizard.weiter": "Weiter",
  "wizard.weiter_ohne_anderung": "Weiter ohne Änderung",
  "wizard.zum_status": "Zum Status",
- "js.vor_nach": ""
+ "js.vor_nach": "",
+ "js.aktuell": "Aktuell",
+ "js.wird_gemessen": "wird gemessen …"
 }

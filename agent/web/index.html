@@ -654,6 +654,23 @@ function age(ts) {
   if (s < 172800) return tx("js.vor") + Math.round(s / 3600) + " h" + tx("js.vor_nach");
   return tx("js.vor") + Math.round(s / 86400) + tx("js.tagen") + tx("js.vor_nach");
 }
+// 0.27.10 (owner): current speed per tunnel from two status polls (every 5 s), in bit/s like a speed test
+const RATE = {};
+function rate(key, prof, rx, tx, now) {
+  const prev = RATE[key];
+  RATE[key] = {prof, rx: rx || 0, tx: tx || 0, now};
+  if (!prev || prev.prof !== prof || now <= prev.now || rx < prev.rx || tx < prev.tx) return null;
+  const dt = now - prev.now;
+  return {rx: (rx - prev.rx) * 8 / dt, tx: (tx - prev.tx) * 8 / dt};
+}
+function bits(n) {
+  const u = ["bit/s", "kbit/s", "Mbit/s", "Gbit/s"]; let i = 0;
+  while (n >= 1000 && i < u.length - 1) { n /= 1000; i++; }
+  return (i ? n.toFixed(n < 10 ? 2 : 1) : Math.round(n)) + " " + u[i];
+}
+function speedRow(r) {
+  return [tx("js.aktuell"), r ? tx("js.rx") + bits(r.rx) + tx("js.tx") + bits(r.tx) : tx("js.wird_gemessen")];
+}
 function bytes(n) {
   if (!n) return "0 B";
   const u = ["B", "KiB", "MiB", "GiB", "TiB"]; let i = 0;
@@ -826,7 +843,7 @@ function profPos(p, pid) {
   const all = p.profiles || [], i = all.findIndex((x) => x.id === pid);
   return all.length > 1 && i >= 0 ? " (" + (i + 1) + tx("js.von") + all.length + ")" : "";
 }
-function standbyBlock(sb, nameOf, p) {
+function standbyBlock(sb, nameOf, p, now) {
   if (!sb || !sb.enabled) return "";
   const head = "<h3>" + esc(tx("js.reserve_gross")) + "</h3>";
   if (!sb.profile) return head + "<dl>" + dl([[tx("vpn.status"), tx("js.keine_reserve")]]) + "</dl>";
@@ -841,6 +858,7 @@ function standbyBlock(sb, nameOf, p) {
     [tx("js.handshake"), sb.handshake_age != null ? age(Math.floor(Date.now() / 1000) - sb.handshake_age) : tx("js.tunnel_lauft_nicht")],
     [tx("js.endpoint"), sb.endpoint || sb.config_endpoint || "-"],
     [tx("js.transfer"), tx("js.rx") + bytes(sb.rx) + tx("js.tx") + bytes(sb.tx)],
+    speedRow(rate("standby", sb.profile, sb.rx, sb.tx, now)),
     ["MTU", mtuText(sb)], sb.error && sb.ready ? [tx("js.fehler"), sb.error] : null]) + "</dl>";
 }
 function standbyRow(sb) {
@@ -1067,7 +1085,8 @@ async function refresh() {
       actName && p.port ? [tx("js.erreichbar"), "https://" + actName + ":" + p.port] : null,
       [tx("js.handshake"), p.up ? age(p.handshake) : tx("js.tunnel_lauft_nicht")], [tx("js.endpoint"), p.endpoint || p.config_endpoint || "-"],
       [tx("js.transfer"), tx("js.rx") + bytes(p.rx) + tx("js.tx") + bytes(p.tx)],
-      ["MTU", mtuText(p)], p.error ? [tx("js.fehler"), p.error] : null]) + "</dl>" + standbyBlock(p.failover && p.failover.standby_tunnel, nameOf, p);
+      speedRow(rate("active", act.id, p.rx, p.tx, st.time)),
+      ["MTU", mtuText(p)], p.error ? [tx("js.fehler"), p.error] : null]) + "</dl>" + standbyBlock(p.failover && p.failover.standby_tunnel, nameOf, p, st.time);
   }
   const b = st.backend;
   dot("d-backend", lk("backend"));
