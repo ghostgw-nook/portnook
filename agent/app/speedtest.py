@@ -6,6 +6,7 @@ nothing goes through the home line. Several connections run at once for a few se
 test; the result is in bit/s. It measures the path from the VPN exit to Cloudflare, not to a visitor, which is good
 enough to compare profiles. While it runs the tunnel is busy (a stream may stutter briefly).
 """
+import re
 import socket
 import ssl
 import threading
@@ -14,7 +15,8 @@ import time
 HOST = "speed.cloudflare.com"
 SECONDS = 6          # per direction
 STREAMS = 4          # parallel connections
-DOWN_BYTES = 50 * 1000 * 1000   # per download request; the server answers 403 above about 50-100 MB
+DOWN_BYTES = 100 * 1000 * 1000 - 1  # per download request: the largest the server allows (403 from 100 MB on);
+                                  # few requests matter, the server limits requests per exit IP (429)
 UP_BYTES = 100 * 1000 * 1000    # per upload body; requests repeat until the time is up
 CHUNK = 256 * 1024
 SO_BINDTODEVICE = getattr(socket, "SO_BINDTODEVICE", 25)
@@ -47,6 +49,10 @@ def _head(sock):
             raise SpeedError("ungültige Antwort")
     head, rest = data.split(b"\r\n\r\n", 1)
     status = head.split(b"\r\n", 1)[0].split()
+    if len(status) > 1 and status[1] == b"429":
+        wait = re.search(rb"(?im)^retry-after:\s*(\d+)", head)
+        raise SpeedError("Speedtest-Server bremst diese Exit-IP gerade (429, die IP teilen sich viele VPN-Nutzer). "
+                         "Bitte in %s nochmals versuchen." % ("%d s" % int(wait.group(1)) if wait else "ein paar Minuten"))
     if len(status) < 2 or not status[1].startswith(b"2"):
         raise SpeedError("Speedtest-Server antwortete %s" % status[1].decode("ascii", "replace") if len(status) > 1 else "?")
     return rest
