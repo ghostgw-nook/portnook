@@ -67,13 +67,18 @@ Für den normalen Docker-Tab von Unraid gibt es die Vorlage [`agent/unraid/portn
 Sie setzt dasselbe wie die Compose-Datei: `NET_ADMIN`, die drei `sysctl`, das Watchtower-Label, `/data` in
 `/mnt/user/appdata/portnook` und optional den Zoraxy-Ordner.
 
-1. Die Datei als `my-portnook.xml` nach `/boot/config/plugins/dockerMan/templates-user/` kopieren, z. B. über
-   die Freigabe `flash` (`\\tower\flash\config\plugins\dockerMan\templates-user\`) oder im Terminal mit
-   `nano /boot/config/plugins/dockerMan/templates-user/my-portnook.xml` und den Inhalt einfügen.
-2. **Docker** → **Add Container** → bei **Template** `portnook` wählen.
+1. Im Unraid-Terminal (Symbol `>_` oben rechts) die Vorlage herunterladen:
+
+   ```bash
+   mkdir -p /boot/config/plugins/dockerMan/templates-user && curl -fsSL -o /boot/config/plugins/dockerMan/templates-user/my-portnook.xml https://raw.githubusercontent.com/ghostgw-nook/portnook/main/agent/unraid/portnook.xml
+   ```
+
+2. **Docker** → **Add Container** → bei **Template** `portnook` wählen (unter «User templates»).
 3. **Network Type:** `bridge` genügt. Für den [LAN-Eingang](#lan-eingang-portnook) `Custom: br0` mit fester IP
    wählen; dann gilt die Port-Zuordnung nicht, das WebUI ist unter dieser IP auf Port 8090.
-4. Ohne Zoraxy das Feld **Zoraxy certificates** leer lassen. **Apply**, danach das WebUI über das Icon öffnen.
+4. **Zoraxy certificates:** mit Zoraxy auf dessen Zertifikatsordner stellen (mit der üblichen Zoraxy-Vorlage
+   `/mnt/user/appdata/zoraxy/conf/certs`), ohne Zoraxy den Vorschlag lassen. **Apply**, danach das WebUI über
+   das Icon öffnen.
 
 Updates: im Docker-Tab **Check for Updates** und **Apply update** (nicht automatisch, siehe
 [Updates](#10-updates-und-umstieg-von-08)). 

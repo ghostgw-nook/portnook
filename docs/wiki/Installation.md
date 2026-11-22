@@ -31,10 +31,20 @@ certificate folder, see [Zoraxy](Zoraxy).
 Use `agent/compose.unraid.yaml` with the **Docker Compose Manager** plugin: create a stack `portnook`, paste the
 file, set `PF_BIND` to the Unraid LAN IP, **Compose Up**. Data lives in `/mnt/user/appdata/portnook`.
 
-**Without the Compose plugin:** copy [`agent/unraid/portnook.xml`](https://github.com/ghostgw-nook/portnook/blob/main/agent/unraid/portnook.xml)
-to `/boot/config/plugins/dockerMan/templates-user/my-portnook.xml` (flash share or `nano` in the terminal), then
-**Docker** → **Add Container** → template `portnook`. It sets `NET_ADMIN`, the sysctls, the Watchtower label and
-`/data` for you; leave **Zoraxy certificates** empty if you do not use Zoraxy.
+**Without the Compose plugin:** use the template [`agent/unraid/portnook.xml`](https://github.com/ghostgw-nook/portnook/blob/main/agent/unraid/portnook.xml).
+
+1. Open the Unraid terminal (icon `>_` top right) and download the template:
+
+   ```bash
+   mkdir -p /boot/config/plugins/dockerMan/templates-user && curl -fsSL -o /boot/config/plugins/dockerMan/templates-user/my-portnook.xml https://raw.githubusercontent.com/ghostgw-nook/portnook/main/agent/unraid/portnook.xml
+   ```
+
+2. **Docker** → **Add Container** → **Template**: choose `portnook` (under "User templates").
+3. Check **Data** (`/mnt/user/appdata/portnook`). With Zoraxy set **Zoraxy certificates** to its certificate
+   folder (with the usual Zoraxy template `/mnt/user/appdata/zoraxy/conf/certs`); without Zoraxy keep the default.
+4. **Apply**, then open the web UI from the container icon.
+
+The template sets `NET_ADMIN`, the sysctls and the Watchtower label for you.
 
 For the [LAN entry](Home-network-and-LAN-entry) the container needs its own LAN IP (network "Custom: br0" with a
 fixed IP) instead of the bridge network.

@@ -29,7 +29,7 @@ Example: [v0.27.0](https://github.com/ghostgw-nook/portnook/tree/v0.27.0/docs/wi
 | [Home](Home) | 0.27 | 0.27 (rc1) |
 | [How it works](How-it-works) | 0.27 | 0.27 (rc1), diagram in 0.27.1 |
 | [So funktioniert es](So-funktioniert-es) (Deutsch) | 0.27 | 0.27.1 |
-| [Installation](Installation) | 0.27 | 0.27 (rc1) |
+| [Installation](Installation) | 0.27 | 0.27 (rc1), Unraid template in 0.27.2 |
 | [Port 443 or a dedicated port](Reverse-proxy-port) | 0.27 | 0.27 (rc1) |
 | [Nginx Proxy Manager](Nginx-Proxy-Manager) | 0.27 | 0.27 (rc1) |
 | [Zoraxy](Zoraxy) | 0.27 | 0.27 (rc1) |

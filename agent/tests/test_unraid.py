@@ -26,6 +26,22 @@ class UnraidTemplateTest(unittest.TestCase):
         self.assertEqual(targets.get("/data"), "Path")
         self.assertEqual(targets.get("8090"), "Port")
 
+    def test_no_empty_path(self):
+        # an empty host path makes Unraid build "-v :/target", which docker rejects
+        for c in self.root.iter("Config"):
+            if c.get("Type") == "Path":
+                with self.subTest(target=c.get("Target")):
+                    self.assertTrue((c.text or "").strip())
+
+    def test_starts_with_container(self):
+        # no comment or blank line before the root element, as Unraid writes its own templates
+        text = (AGENT / "unraid" / "portnook.xml").read_text()
+        self.assertTrue(text.startswith('<?xml version="1.0"?>\n<Container version="2">'))
+
+    def test_template_url_is_raw_file(self):
+        self.assertEqual(self.root.findtext("TemplateURL"),
+                         "https://raw.githubusercontent.com/ghostgw-nook/portnook/main/agent/unraid/portnook.xml")
+
 
 if __name__ == "__main__":
     unittest.main()
