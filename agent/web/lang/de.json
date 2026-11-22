@@ -470,7 +470,6 @@
  "log.kopieren": "Log kopieren",
  "log.herunterladen": "Als Datei speichern",
  "log.kopiert": "In die Zwischenablage kopiert",
- "js.speedtest": "Speedtest",
  "js.speedtest_noch_nie": "noch nicht gemessen (Knopf unter Diagnose)",
  "js.auslastung": "Auslastung",
  "redirect.modus": "Modus",
@@ -483,5 +482,7 @@
  "js.rr_no_name": "Round Robin: Reserve hat keinen eigenen Verbindungsnamen, nur aktiver Tunnel",
  "js.rr_no_port": "Round Robin: Reserve hat noch keinen Port, nur aktiver Tunnel",
  "js.rr_off": "Round Robin: VPN aus, nur fester Port",
- "js.speedtest_starten": "Messen"
+ "js.speedtest_starten": "Messen",
+ "js.speedtest_einzeln": "Speedtest 1 Verbindung",
+ "js.speedtest_multi": "Speedtest 4 Verbindungen"
 }

@@ -409,8 +409,9 @@ class Agent:
             return s.get("exit_ip") or ""
         return ""
 
-    def speed_test(self, role):
-        """0.28.0 (owner): download/upload test through the active or the standby tunnel (``app.speedtest``)."""
+    def speed_test(self, role, streams=speedtest.STREAMS):
+        """0.28.0 (owner): download/upload test through the active or the standby tunnel (``app.speedtest``).
+        0.28.5 (owner): ``streams=1`` measures what one connection gets, stored as ``<role>-1``."""
         if not self._proton_on():
             raise SetupError("Kein VPN aktiv.")
         if role == "active":
@@ -426,16 +427,17 @@ class Agent:
             raise SetupError("Es läuft schon ein Speedtest.")
         try:
             name = next((p.get("name", "") for p in self.profiles(self.store.get()) if p["id"] == pid), "")
-            log("speedtest %s (%s, %s) started", role, iface, name)
+            log("speedtest %s (%s, %s, %d stream%s) started", role, iface, name, streams, "" if streams == 1 else "s")
             try:
-                res = speedtest.run(iface, resolve_ipv4)
+                res = speedtest.run(iface, resolve_ipv4, streams=streams)
             except (speedtest.SpeedError, OSError) as err:
-                out = {"ok": False, "error": str(err)[:200], "time": int(self.clock()), "profile": pid, "name": name}
+                out = {"ok": False, "error": str(err)[:200], "time": int(self.clock()), "profile": pid, "name": name,
+                       "streams": streams}
                 log("speedtest %s failed: %s", role, out["error"])
             else:
-                out = dict(res, ok=True, time=int(self.clock()), profile=pid, name=name)
+                out = dict(res, ok=True, time=int(self.clock()), profile=pid, name=name, streams=streams)
                 log("speedtest %s (%s): down %.1f Mbit/s, up %.1f Mbit/s", role, name, res["down"] / 1e6, res["up"] / 1e6)
-            self.rt["speedtest"][role] = out
+            self.rt["speedtest"][role if streams > 1 else role + "-1"] = out
             return dict(out, role=role)
         finally:
             self._speed_lock.release()
@@ -837,6 +839,8 @@ class Agent:
             return res
         if name in ("speedtest-active", "speedtest-standby"):
             return self.speed_test(name.split("-", 1)[1])
+        if name in ("speedtest-active-1", "speedtest-standby-1"):
+            return self.speed_test(name.split("-")[1], streams=1)
         if name == "natpmp-renew":
             if not self._proton_on() or self.vpn_provider() != "proton":
                 raise SetupError("NAT-PMP gibt es nur mit Proton.")

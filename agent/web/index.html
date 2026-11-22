@@ -683,6 +683,7 @@ function bits(n) {
 function speedRow(r) {
   return [tx("js.aktuell"), r ? tx("js.rx") + bits(r.rx) + tx("js.tx") + bits(r.tx) : tx("js.wird_gemessen")];
 }
+// 0.28.5: "<role>" = 4 connections (line capacity, with load), "<role>-1" = 1 connection (what one client gets)
 // 0.28.0: last speed test of this tunnel (same profile) and how full the line is now (current tx of the test's up)
 function testRow(t, prof, r, role) {
   const busyNow = (S.speedBusy || {})[role], err = (S.speedErr || {})[role];
@@ -697,7 +698,7 @@ function testRow(t, prof, r, role) {
     if (r && t.up && t.down) v += " · " + tx("js.auslastung") + " ↑ " + Math.min(100, Math.round(r.tx * 100 / t.up)) +
       " % / ↓ " + Math.min(100, Math.round(r.rx * 100 / t.down)) + " %";
   }
-  return [tx("js.speedtest"), esc(v) + btn, true];
+  return [tx(/-1$/.test(role) ? "js.speedtest_einzeln" : "js.speedtest_multi"), esc(v) + btn, true];
 }
 // speed test buttons sit in the tunnel blocks, which are redrawn on every refresh: keep the state in S
 document.addEventListener("click", async (ev) => {
@@ -903,6 +904,7 @@ function standbyBlock(sb, nameOf, p, now) {
     [tx("js.endpoint"), sb.endpoint || sb.config_endpoint || "-"],
     [tx("js.transfer"), tx("js.rx") + bytes(sb.rx) + tx("js.tx") + bytes(sb.tx)],
     speedRow(sbRate), testRow(((p.speedtest || {}).standby), sb.profile, sbRate, "standby"),
+    testRow(((p.speedtest || {})["standby-1"]), sb.profile, null, "standby-1"),
     ["MTU", mtuText(sb)], sb.error && sb.ready ? [tx("js.fehler"), sb.error] : null]) + "</dl>";
 }
 function standbyRow(sb) {
@@ -1133,6 +1135,7 @@ async function refresh() {
       [tx("js.handshake"), p.up ? age(p.handshake) : tx("js.tunnel_lauft_nicht")], [tx("js.endpoint"), p.endpoint || p.config_endpoint || "-"],
       [tx("js.transfer"), tx("js.rx") + bytes(p.rx) + tx("js.tx") + bytes(p.tx)],
       speedRow(actRate), testRow((p.speedtest || {}).active, act.id, actRate, "active"),
+      testRow((p.speedtest || {})["active-1"], act.id, null, "active-1"),
       ["MTU", mtuText(p)], p.error ? [tx("js.fehler"), p.error] : null]) + "</dl>" + standbyBlock(p.failover && p.failover.standby_tunnel, nameOf, p, st.time);
   }
   const b = st.backend;

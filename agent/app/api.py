@@ -16,7 +16,8 @@ from .validate import ValidationError
 MAX_BODY = 48 * 1024
 MAX_CONNS = 32
 ACTIONS = ("proton-reconnect", "natpmp-renew", "backend-test", "ddns-update", "cert-issue", "cert-deliver",
-           "redirect-run", "push-test", "speedtest-active", "speedtest-standby")
+           "redirect-run", "push-test", "speedtest-active", "speedtest-standby",
+           "speedtest-active-1", "speedtest-standby-1")
 _EXAMPLE_RE = re.compile(r"/api/redirect/example/([a-z-]{1,32})")
 _LANG_RE = re.compile(r"[a-z]{2}(-[A-Z]{2})?\.json")
 _DOWNLOAD_RE = re.compile(r"/api/cert/download/([a-z.]{1,20})")

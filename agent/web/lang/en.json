@@ -470,7 +470,6 @@
  "log.kopieren": "Copy log",
  "log.herunterladen": "Save as file",
  "log.kopiert": "Copied to the clipboard",
- "js.speedtest": "Speed test",
  "js.speedtest_noch_nie": "not measured yet (button under Diagnostics)",
  "js.auslastung": "load",
  "redirect.modus": "Mode",
@@ -483,5 +482,7 @@
  "js.rr_no_name": "Round robin: standby has no own connection name, active tunnel only",
  "js.rr_no_port": "Round robin: standby has no port yet, active tunnel only",
  "js.rr_off": "Round robin: VPN off, fixed port only",
- "js.speedtest_starten": "Run test"
+ "js.speedtest_starten": "Run test",
+ "js.speedtest_einzeln": "Speed test 1 connection",
+ "js.speedtest_multi": "Speed test 4 connections"
 }

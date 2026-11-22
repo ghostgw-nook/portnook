@@ -15,7 +15,7 @@ class UiActionsTest(unittest.TestCase):
         allowed = set(ast.literal_eval(node.value))
         html = open(os.path.join(HERE, "..", "web", "index.html"), encoding="utf-8").read()
         used = set(re.findall(r'data-action="([a-z-]+)"', html))
-        used |= {"speedtest-" + r for r in re.findall(r'testRow\([^\n]*"([a-z]+)"\)', html)}
+        used |= {"speedtest-" + r for r in re.findall(r'testRow\([^\n]*"([a-z0-9-]+)"\)', html)}
         self.assertTrue(used)
         self.assertEqual(set(), used - allowed)
 
