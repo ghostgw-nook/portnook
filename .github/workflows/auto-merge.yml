@@ -1,5 +1,5 @@
 # Push to claude/** -> tests -> merge into main -> tag vX.Y.Z from VERSION (if new) -> GitHub releases
-# -> build/deploy (build.yml) -> delete the claude/** branches already contained in main.
+# -> build/deploy (build.yml, only when files of the image changed) -> delete the claude/** branches already contained in main.
 # Pushes made with GITHUB_TOKEN start no workflow, so the following steps are called directly.
 name: Auto-merge
 
@@ -94,7 +94,8 @@ jobs:
           done
 
   build:
-    needs: merge
+    needs: [tests, merge]
+    if: needs.tests.outputs.image == 'true'
     uses: ./.github/workflows/build.yml
     with:
       ref: main

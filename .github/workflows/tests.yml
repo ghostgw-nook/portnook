@@ -8,11 +8,45 @@ on:
   pull_request:
   workflow_dispatch:
   workflow_call:
+    outputs:
+      image:
+        description: "'true' when files that go into the container image changed"
+        value: ${{ jobs.changes.outputs.image }}
 
 permissions:
   contents: read
 
 jobs:
+  # What changed against main: docs, README, screenshots, wiki or release notes need no image test and no new image.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.diff.outputs.image }}
+      e2e: ${{ steps.diff.outputs.e2e }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Changed files
+        id: diff
+        run: |
+          set -euo pipefail
+          git fetch -q origin main
+          base=$(git merge-base origin/main HEAD)
+          files=$(git diff --name-only "$base" HEAD)
+          echo "$files"
+          # files that are copied into the image (agent/Dockerfile)
+          image=false; e2e=false
+          if [ "$base" = "$(git rev-parse HEAD)" ] || grep -qE '^agent/(Dockerfile|entrypoint\.sh|app/|web/|examples/)' <<<"$files"; then
+            image=true; e2e=true
+          elif grep -qE '^\.github/(workflows|scripts)/' <<<"$files"; then
+            e2e=true
+          fi
+          echo "image=$image e2e=$e2e"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+          echo "e2e=$e2e" >> "$GITHUB_OUTPUT"
+
   unit:
     runs-on: ubuntu-latest
     steps:
@@ -27,6 +61,8 @@ jobs:
         run: python -m unittest discover -s tests -t .
 
   images:
+    needs: changes
+    if: needs.changes.outputs.e2e == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -55,6 +91,7 @@ jobs:
 
   e2e:
     needs: images
+    if: needs.changes.outputs.e2e == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

@@ -195,6 +195,8 @@ derselben Lizenz zugänglich machen.
 - **Auto-Merge:** Ein Push auf `claude/**` startet `tests.yml`; wenn grün, wird nach `main` gemergt, mit `vX.Y.Z`
   aus `VERSION` getaggt (wenn der Tag neu ist), als GitHub-Release veröffentlicht, gebaut und deployt
   (`build.yml`); gemergte `claude/**`-Branches werden gelöscht (`.github/workflows/auto-merge.yml`).
+  Ändert sich nichts am Container (nur Doku, README, Screenshots, Wiki, Unraid-Vorlage), fallen Image- und
+  e2e-Tests sowie der Image-Build weg; `VERSION` bleibt dann gleich.
 - **Dependabot:** Patch- und Minor-Updates werden nach den Tests gemergt, mit Patch-Erhöhung von `VERSION`, Tag,
   Release und Build; der Dependabot-Branch wird gelöscht. Major-Updates bleiben für eine manuelle Prüfung offen
   (`.github/workflows/dependabot-auto-merge.yml`, `.github/dependabot.yml`).
@@ -220,7 +222,10 @@ nach GHCR (`build.yml`, plus wöchentlicher Rebuild), Dependabot für `github-ac
 ## Notes for AI assistants
 
 - Work on `claude/**` branches only; `auto-merge.yml` merges into `main` after green tests.
-- Every change bumps `VERSION` (fix: patch, feature: minor); optional notes in `.github/release-notes/X.Y.Z.md`.
+- Every change to the container (`agent/Dockerfile`, `entrypoint.sh`, `app/`, `web/`, `examples/`) bumps `VERSION`
+  (fix: patch, feature: minor); optional notes in `.github/release-notes/X.Y.Z.md`. Changes to docs, README,
+  screenshots, wiki, Unraid template or workflows keep `VERSION`: no tag, no release, no new image, and the
+  image and e2e tests are skipped for docs-only changes.
 - Code, comments, docs, commits and logs in English. **Exception (owner decision, 0.7.1):** `README.md` and
   `docs/installation.md` are written in German (Swiss spelling, no ß) for the users; keep them German.
   `README.en.md` is the English README; keep both READMEs in sync.
