@@ -469,5 +469,20 @@
  "js.wird_gemessen": "measuring …",
  "log.kopieren": "Copy log",
  "log.herunterladen": "Save as file",
- "log.kopiert": "Copied to the clipboard"
+ "log.kopiert": "Copied to the clipboard",
+ "status.speedtest_aktiv": "Speed test active tunnel",
+ "status.speedtest_reserve": "Speed test standby",
+ "js.speedtest": "Speed test",
+ "js.speedtest_noch_nie": "not measured yet (button under Diagnostics)",
+ "js.auslastung": "load",
+ "redirect.modus": "Mode",
+ "redirect.modus_failover": "Active tunnel only (failover)",
+ "redirect.modus_roundrobin": "Spread clients (round robin)",
+ "redirect.modus_hint": "Round robin spreads clients by their IP across the active and the standby tunnel. Works only with a script (.htaccess or index.php), not with Cloudflare. Each VPN tunnel needs its own connection name (DNS name); if both share one name, everything stays on the active tunnel. If the standby fails, it is taken out of the rotation.",
+ "js.verteilt_auf": "Spread across",
+ "js.rr_on": "Round robin on (active + standby)",
+ "js.rr_no_standby": "Round robin: standby not ready, active tunnel only",
+ "js.rr_no_name": "Round robin: standby has no own connection name, active tunnel only",
+ "js.rr_no_port": "Round robin: standby has no port yet, active tunnel only",
+ "js.rr_off": "Round robin: VPN off, fixed port only"
 }

@@ -7,7 +7,7 @@ import socket
 import threading
 import time
 
-from . import auth, lights, net as netmod, probe, protonconf, validate
+from . import auth, lights, net as netmod, probe, protonconf, speedtest, validate
 from .log import log
 from .validate import ValidationError
 
@@ -78,7 +78,9 @@ class Agent:
             "net": {"applied": False, "error": ""},
             "proton": {"exit_ip": "", "error": "", "tested": 0, "natpmp": None},
             "backend": {},
+            "speedtest": {},  # 0.28.0: last result per tunnel role
         }
+        self._speed_lock = threading.Lock()
         from .certs import CertManager
         from .egress import Egress
         from .failover import Failover
@@ -406,6 +408,37 @@ class Agent:
         if s.get("profile") in ids and self.net.link_exists(s.get("iface") or ""):
             return s.get("exit_ip") or ""
         return ""
+
+    def speed_test(self, role):
+        """0.28.0 (owner): download/upload test through the active or the standby tunnel (``app.speedtest``)."""
+        if not self._proton_on():
+            raise SetupError("Kein VPN aktiv.")
+        if role == "active":
+            iface, pid = self.active_if, (self.active_profile() or {}).get("id")
+            if not self.net.link_exists(iface):
+                raise SetupError("Der aktive Tunnel läuft nicht.")
+        else:
+            s = self.standby.state
+            iface, pid = s.get("iface"), s.get("profile")
+            if not pid or not self.standby.health()[0]:
+                raise SetupError("Keine bereite Reserve.")
+        if not self._speed_lock.acquire(blocking=False):
+            raise SetupError("Es läuft schon ein Speedtest.")
+        try:
+            name = next((p.get("name", "") for p in self.profiles(self.store.get()) if p["id"] == pid), "")
+            log("speedtest %s (%s, %s) started", role, iface, name)
+            try:
+                res = speedtest.run(iface, resolve_ipv4)
+            except (speedtest.SpeedError, OSError) as err:
+                out = {"ok": False, "error": str(err)[:200], "time": int(self.clock()), "profile": pid, "name": name}
+                log("speedtest %s failed: %s", role, out["error"])
+            else:
+                out = dict(res, ok=True, time=int(self.clock()), profile=pid, name=name)
+                log("speedtest %s (%s): down %.1f Mbit/s, up %.1f Mbit/s", role, name, res["down"] / 1e6, res["up"] / 1e6)
+            self.rt["speedtest"][role] = out
+            return dict(out, role=role)
+        finally:
+            self._speed_lock.release()
 
     def running_tunnels(self):
         """``[(role, profile id, exit ip)]`` of the tunnels that run now: ``active`` first, then ``standby``."""
@@ -802,6 +835,8 @@ class Agent:
             if res.get("skipped"):
                 raise SetupError("Redirect nicht möglich: %s." % res["skipped"])
             return res
+        if name in ("speedtest-active", "speedtest-standby"):
+            return self.speed_test(name.split("-", 1)[1])
         if name == "natpmp-renew":
             if not self._proton_on() or self.vpn_provider() != "proton":
                 raise SetupError("NAT-PMP gibt es nur mit Proton.")
@@ -849,6 +884,7 @@ class Agent:
                        "config_endpoint": (self.active_profile(st) or {}).get("endpoint", ""),
                        "profiles": self.failover.listing(st), "failover": self.failover.status()})
         proton["handshake_age"] = now - proton["handshake"] if proton["handshake"] else None
+        proton["speedtest"] = {r: dict(v) for r, v in self.rt["speedtest"].items()}
         backend = {"addr": st["backend"].get("addr", ""), "lan_nets": st["backend"].get("lan_nets", [])}
         backend.update({k: v for k, v in (self.rt.get("backend") or {}).items()
                         if k in ("ok", "tcp", "tls", "latency_ms", "error", "checked", "sni")})

@@ -354,5 +354,39 @@ class SshKeyTest(unittest.TestCase):
             agent.redirect.ssh_upload("not a key")
 
 
+
+class RoundRobinGeneratorTest(unittest.TestCase):
+    """0.28.0 (owner): clients shared between the active tunnel and the standby."""
+    RULES = [("start.example.ch", ["https://tv.a.myaddr.io:41000", "https://tv.b.myaddr.io:42000"]),
+             ("*.start.example.ch", ["https://*.a.myaddr.io:41000", "https://*.b.myaddr.io:42000"]),
+             ("fix.example.ch", ["https://fix.myaddr.io:41000"])]
+
+    def test_groups_cover_every_address_character_once(self):
+        for n in (2, 3, 4):
+            g = redirect.addr_groups(n)
+            self.assertEqual(sorted("".join(g)), sorted(redirect.ADDR_CHARS))
+            self.assertTrue(all(g))
+
+    def test_htaccess_one_block_per_tunnel(self):
+        text = redirect.htaccess(self.RULES, 302)
+        self.assertEqual(text.count("RewriteRule"), 5)
+        self.assertIn("RewriteCond %{REMOTE_ADDR} [02468ace]$ [NC]", text)
+        lines = text.splitlines()
+        i = lines.index("RewriteRule ^(.*)$ https://tv.a.myaddr.io:41000/$1 [R=302,L]")
+        self.assertTrue(lines[i - 1].startswith("RewriteCond %{HTTP_HOST}"))  # host condition last (%1)
+        self.assertIn("RewriteRule ^(.*)$ https://%1.b.myaddr.io:42000/$1 [R=302,L]", text)
+
+    def test_single_target_unchanged(self):
+        one = [("start.example.ch", "https://tv.a.myaddr.io:41000")]
+        self.assertEqual(redirect.htaccess(one, 302), redirect.htaccess([(e, [u]) for e, u in one], 302))
+        self.assertNotIn("REMOTE_ADDR", redirect.htaccess(one, 302))
+
+    def test_php_picks_by_client_address(self):
+        text = redirect.php(self.RULES, 302)
+        self.assertIn("['https://tv.a.myaddr.io:41000', 'https://tv.b.myaddr.io:42000']", text)
+        self.assertIn("crc32($_SERVER['REMOTE_ADDR']", text)
+        self.assertIn("'https://$1.b.myaddr.io:42000'", text)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -49,13 +49,37 @@ def _host_re(entry):
     return "^" + entry.replace(".", r"\.") + r"(:[0-9]+)?$"
 
 
+ADDR_CHARS = "0123456789abcdef"  # last character of an IPv4 (digit) or IPv6 (hex) client address
+
+
+def _urls(url):
+    return list(url) if isinstance(url, (list, tuple)) else [url]
+
+
+def addr_groups(n):
+    """0.28.0 round robin in ``.htaccess``: the clients are split by the last character of their address into
+    ``n`` groups (digits and hex letters dealt out in turn), so one client always gets the same tunnel."""
+    groups = [""] * n
+    for i, ch in enumerate(ADDR_CHARS):
+        groups[i % n] += ch
+    return groups
+
+
 def htaccess(rules, status):
-    """``.htaccess`` for all rules: /.well-known/ stays local (certificate of the entry host), no caching."""
+    """``.htaccess`` for all rules: /.well-known/ stays local (certificate of the entry host), no caching.
+    A rule with several target URLs (round robin, 0.28.0) gets one block per target with a condition on the
+    client address; the last target takes the rest."""
     out = ["# managed by portnook, do not edit", "RewriteEngine On"]
     for entry, url in rules:
-        # host condition last: %1 refers to the last matched condition
-        out += [r"RewriteCond %{REQUEST_URI} !^/\.well-known/", "RewriteCond %%{HTTP_HOST} %s [NC]" % _host_re(entry),
-                "RewriteRule ^(.*)$ %s/$1 [R=%d,L]" % (url.replace("*", "%1", 1), int(status))]
+        urls = _urls(url)
+        groups = addr_groups(len(urls))
+        for i, u in enumerate(urls):
+            # host condition last: %1 refers to the last matched condition
+            out.append(r"RewriteCond %{REQUEST_URI} !^/\.well-known/")
+            if i < len(urls) - 1:
+                out.append("RewriteCond %%{REMOTE_ADDR} [%s]$ [NC]" % groups[i])
+            out += ["RewriteCond %%{HTTP_HOST} %s [NC]" % _host_re(entry),
+                    "RewriteRule ^(.*)$ %s/$1 [R=%d,L]" % (u.replace("*", "%1", 1), int(status))]
     out += ["", "<IfModule mod_headers.c>",
             '  Header always set Cache-Control "no-store, no-cache, must-revalidate, max-age=0"',
             '  Header always set Pragma "no-cache"', '  Header always set Expires "0"', "</IfModule>", ""]
@@ -64,13 +88,17 @@ def htaccess(rules, status):
 
 def php(rules, status):
     """``index.php`` for all rules (web spaces without .htaccess)."""
-    rows = ",\n".join("  ['/%s/i', '%s']" % (_host_re(e).replace("/", r"\/"), u.replace("*", "$1", 1)) for e, u in rules)
+    # 0.28.0: every rule has a list of targets; with several, crc32 of the client address picks one (round robin,
+    # the same client always gets the same tunnel)
+    rows = ",\n".join("  ['/%s/i', [%s]]" % (_host_re(e).replace("/", r"\/"),
+                                             ", ".join("'%s'" % x.replace("*", "$1", 1) for x in _urls(u))) for e, u in rules)
     return ("<?php\n// managed by portnook, do not edit\n"
             "header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');\n"
             "header('Pragma: no-cache');\nheader('Expires: 0');\n"
             "$host = strtolower($_SERVER['HTTP_HOST'] ?? '');\n$rules = [\n%s\n];\n"
             "foreach ($rules as $r) {\n  if (preg_match($r[0], $host)) {\n"
-            "    header('Location: ' . preg_replace($r[0], $r[1], explode(':', $host)[0]) . $_SERVER['REQUEST_URI'], true, %d);\n"
+            "    $t = $r[1][count($r[1]) > 1 ? sprintf('%%u', crc32($_SERVER['REMOTE_ADDR'] ?? '')) %% count($r[1]) : 0];\n"
+            "    header('Location: ' . preg_replace($r[0], $t, explode(':', $host)[0]) . $_SERVER['REQUEST_URI'], true, %d);\n"
             "    exit;\n  }\n}\nhttp_response_code(404);\n" % (rows, int(status)))
 
 
@@ -288,6 +316,13 @@ class Redirect:
             raise ValidationError("Subdomain des Ziels: nur a-z, 0-9 und '-'.")
         new["sub"] = sub
         new["to"] = self._to(body.get("to"))
+        mode = str(body.get("mode") or cur.get("mode") or "failover")
+        if mode not in ("failover", "roundrobin"):
+            raise ValidationError("Modus: failover oder roundrobin.")
+        if mode == "roundrobin" and provider != "script":
+            raise ValidationError("Clients verteilen (Round Robin) geht nur mit Skript (.htaccess oder index.php), "
+                                  "nicht mit Cloudflare.")
+        new["mode"] = mode
         try:
             new["status"] = int(body.get("status") or 302)
         except (TypeError, ValueError):
@@ -365,13 +400,62 @@ class Redirect:
 
     def mappings(self, cfg, tgt):
         """``[(entry host, target URL)]``: the main entry first, then the rules (``*`` = same subdomain)."""
-        out = [(cfg.get("entry_host", ""), tgt["url"])]
-        # fixed hosts before *.host, so app.eingang-muster... wins over *.eingang-muster... (0.23.0)
+        return [(e, urls[0]) for e, urls in self.mappings_multi(cfg, tgt, rr=False)]
+
+    def rr_standby(self, cfg=None):
+        """0.28.0 (owner): ``(name, port)`` of the standby tunnel when the clients are shared between the active
+        tunnel and the standby (mode ``roundrobin``), ``None`` when it does not take part: mode off, standby not
+        ready, no TCP port, or no name of its own (every tunnel needs its own connection name)."""
+        cfg = cfg if cfg is not None else self.cfg()
+        if cfg.get("mode") != "roundrobin" or not self.agent._proton_on():
+            return None
+        sb = self.agent.standby
+        if not sb.state.get("profile") or not sb.health()[0]:
+            return None
+        name, ports = self.agent.tunnel_fqdn("standby"), sb.ports()
+        if not name or not ports or name == self.active_name():
+            return None
+        return name, int(ports[0])
+
+    def rr_state(self, cfg=None):
+        """Why the round robin does (not) share right now, for the UI."""
+        cfg = cfg if cfg is not None else self.cfg()
+        if cfg.get("mode") != "roundrobin":
+            return ""
+        if self.rr_standby(cfg):
+            return "on"
+        sb = self.agent.standby
+        if not sb.state.get("profile") or not sb.health()[0]:
+            return "no_standby"
+        if not self.agent.tunnel_fqdn("standby"):
+            return "no_name"
+        return "no_port"
+
+    def mappings_multi(self, cfg, tgt, rr=True):
+        """``[(entry host, [target URLs])]``. One URL per rule, or (round robin, 0.28.0) one per tunnel for rules
+        that follow the profile names: the active tunnel first, then the standby. Fixed names stay single."""
         own = self.active_name()
+        tunnels = [(own, tgt["port"])]
+        extra = self.rr_standby(cfg) if rr else None
+        if extra:
+            tunnels.append(extra)
+
+        def urls(to, sub, first_url=None):
+            out = []
+            for i, (name, port) in enumerate(tunnels):
+                base = self.base_for(to, name) if (name or i == 0) else None
+                if base is None:
+                    continue
+                host = ("%s.%s" % (sub, base)) if sub else base
+                u = first_url if (i == 0 and first_url) else "https://%s:%d" % (host, port)
+                if u not in out:
+                    out.append(u)
+            return out
+
+        out = [(cfg.get("entry_host", ""), urls(cfg.get("to"), cfg.get("sub"), tgt["url"]))]
+        # fixed hosts before *.host, so app.eingang-muster... wins over *.eingang-muster... (0.23.0)
         for r in sorted(cfg.get("rules") or [], key=lambda r: r["entry"].startswith("*.")):
-            base = self.base_for(r.get("to"), own)
-            host = base if not r["sub"] else "%s.%s" % (r["sub"], base)
-            out.append((r["entry"], "https://%s:%d" % (host, tgt["port"])))
+            out.append((r["entry"], urls(r.get("to"), r["sub"])))
         return out
 
     def script_text(self):
@@ -457,8 +541,8 @@ class Redirect:
         env.update({"PF_TARGET_URL": tgt["url"], "PF_TARGET_HOST": tgt["host"], "PF_PORT": str(tgt["port"]),
                "PF_IP": tgt["ip"], "PF_STATUS_CODE": str(cfg.get("status", 302)),
                "PF_ENTRY_HOST": cfg.get("entry_host", "")})
-        rules = self.mappings(cfg, tgt)
-        env.update({"PF_RULES": "\n".join("%s %s" % r for r in rules),
+        rules = self.mappings_multi(cfg, tgt)
+        env.update({"PF_RULES": "\n".join("%s %s" % (e, " | ".join(u)) for e, u in rules),
                     "PF_HTACCESS": htaccess(rules, cfg.get("status", 302)), "PF_PHP": php(rules, cfg.get("status", 302))})
         return self._exec(path, env)
 
@@ -485,7 +569,7 @@ class Redirect:
             if not tgt:
                 return {"ok": False, "skipped": "Ziel unbekannt (Port, Name oder IP fehlt)"}
             now = int(self.clock())
-            rules = json.dumps(self.mappings(cfg, tgt))
+            rules = json.dumps(self.mappings_multi(cfg, tgt) if provider == "script" else self.mappings(cfg, tgt))
             # 0.27.13 (owner): set the redirect once after every start, even if the stored target is the same, so
             # the entry host is surely right after an update or restart (one script run / Cloudflare call)
             fresh = not self.rt.get("set_since_start")  # a failed run still waits for RETRY
@@ -559,4 +643,6 @@ class Redirect:
                 "ssh_public_key": self.ssh_public(), "gen": cfg.get("gen") or {"kind": ""},
                 "rules": cfg.get("rules") or [], "to": cfg.get("to", ""), "endpoints": self.endpoints(),
                 "active_name": self.active_name(), "profile_names": sorted(self.profile_names()),
-                "mappings": [{"entry": e, "target": u} for e, u in self.mappings(cfg, tgt)] if tgt else []}
+                "mode": cfg.get("mode", "failover"), "rr": self.rr_state(cfg),
+                "mappings": [{"entry": e, "target": u[0], "targets": u}
+                             for e, u in self.mappings_multi(cfg, tgt)] if tgt else []}

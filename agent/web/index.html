@@ -258,6 +258,8 @@ h3 { font-size: 14px; margin: 16px 0 4px; }
       <button type="button" data-action="backend-test">{{status.backend_testen}}</button>
       <button type="button" data-action="natpmp-renew">{{status.nat_pmp_erneuern}}</button>
       <button type="button" data-action="ddns-update">{{status.ddns_jetzt_aktualisieren}}</button>
+      <button type="button" data-action="speedtest-active">{{status.speedtest_aktiv}}</button>
+      <button type="button" data-action="speedtest-standby">{{status.speedtest_reserve}}</button>
     </div>
     <div id="action-msg"></div>
   </div>
@@ -469,6 +471,12 @@ h3 { font-size: 14px; margin: 16px 0 4px; }
       <label><input type="radio" name="r-prov" value="cloudflare"> {{redirect.cloudflare}}</label>
       <label><input type="radio" name="r-prov" value="script"> {{redirect.skript_z_b_plesk_per}}</label>
     </div>
+    <div class="cols">
+      <div><label for="r-mode">{{redirect.modus}}</label><select id="r-mode">
+        <option value="failover">{{redirect.modus_failover}}</option>
+        <option value="roundrobin">{{redirect.modus_roundrobin}}</option></select></div>
+    </div>
+    <div class="hint" id="r-mode-hint">{{redirect.modus_hint}}</div>
     <div id="r-cf">
       <h3>{{redirect.cloudflare}}</h3>
       <div class="cols">
@@ -676,6 +684,15 @@ function bits(n) {
 function speedRow(r) {
   return [tx("js.aktuell"), r ? tx("js.rx") + bits(r.rx) + tx("js.tx") + bits(r.tx) : tx("js.wird_gemessen")];
 }
+// 0.28.0: last speed test of this tunnel (same profile) and how full the line is now (current tx of the test's up)
+function testRow(t, prof, r) {
+  if (!t || t.profile !== prof) return [tx("js.speedtest"), tx("js.speedtest_noch_nie")];
+  if (!t.ok) return [tx("js.speedtest"), tx("js.fehler") + ": " + esc(t.error || "") + " (" + age(t.time) + ")"];
+  let v = "↓ " + bits(t.down) + " / ↑ " + bits(t.up) + " (" + age(t.time) + ")";
+  if (r && t.up && t.down) v += " · " + tx("js.auslastung") + " ↑ " + Math.min(100, Math.round(r.tx * 100 / t.up)) +
+    " % / ↓ " + Math.min(100, Math.round(r.rx * 100 / t.down)) + " %";
+  return [tx("js.speedtest"), v];
+}
 function bytes(n) {
   if (!n) return "0 B";
   const u = ["B", "KiB", "MiB", "GiB", "TiB"]; let i = 0;
@@ -853,6 +870,7 @@ function standbyBlock(sb, nameOf, p, now) {
   const head = "<h3>" + esc(tx("js.reserve_gross")) + "</h3>";
   if (!sb.profile) return head + "<dl>" + dl([[tx("vpn.status"), tx("js.keine_reserve")]]) + "</dl>";
   const name = nameOf(sb.profile);
+  const sbRate = rate("standby", sb.profile, sb.rx, sb.tx, now);
   return head + "<dl>" + dl([[tx("js.profil"), (sb.profile_name || "-") + profPos(p, sb.profile)],
     [tx("vpn.status"), sb.ready ? tx("js.bereit") : (sb.reason || sb.error || tx("js.wird_aufgebaut"))],
     [tx("vpn.art"), sb.provider === "fixed" ? tx("js.fester_port") : tx("vpn.proton_nat_pmp")],
@@ -863,7 +881,7 @@ function standbyBlock(sb, nameOf, p, now) {
     [tx("js.handshake"), sb.handshake_age != null ? age(Math.floor(Date.now() / 1000) - sb.handshake_age) : tx("js.tunnel_lauft_nicht")],
     [tx("js.endpoint"), sb.endpoint || sb.config_endpoint || "-"],
     [tx("js.transfer"), tx("js.rx") + bytes(sb.rx) + tx("js.tx") + bytes(sb.tx)],
-    speedRow(rate("standby", sb.profile, sb.rx, sb.tx, now)),
+    speedRow(sbRate), testRow(((p.speedtest || {}).standby), sb.profile, sbRate),
     ["MTU", mtuText(sb)], sb.error && sb.ready ? [tx("js.fehler"), sb.error] : null]) + "</dl>";
 }
 function standbyRow(sb) {
@@ -1041,11 +1059,13 @@ function redirectRows(r) {
   if (!r.provider) return [[tx("vpn.status"), tx("js.aus")]];
   return [[tx("js.eingang"), r.entry_host], [tx("js.anbieter"), r.provider === "cloudflare" ? tx("redirect.cloudflare") : tx("redirect.skript")],
     [tx("js.ziel"), r.target || tx("js.unbekannt_port_fehlt")],
+    r.mode === "roundrobin" ? [tx("redirect.modus"), tx("js.rr_" + (r.rr || "off"))] : null,
+    r.mappings && r.mappings[0] && r.mappings[0].targets.length > 1 ? [tx("js.verteilt_auf"), r.mappings[0].targets.join(" | ")] : null,
     r.active_name ? [tx("redirect.regel_ziel_name"), r.active_name + " (" + tx("js.folgt_aktivem_profil") + ")"] : null,
     [tx("js.zuletzt_gesetzt"), r.last_target ? r.last_target + " (" + age(r.last_ok) + ")" : "-"],
     r.queued ? [tx("js.wartet"), tx("js.kein_vpn_tunnel") + r.queued + tx("js.vorgemerkt")] : null,
     r.last_error ? [tx("js.fehler"), r.last_error] : null,
-  ].concat((r.mappings || []).slice(1).map((m) => [tx("js.regel"), m.entry + " -> " + m.target]));
+  ].concat((r.mappings || []).slice(1).map((m) => [tx("js.regel"), m.entry + " -> " + (m.targets || [m.target]).join(" | ")]));
 }
 function delRows(d) {
   const row = (name, t, what) => !t.configured ? null : [name, what + ": " + (t.error ? tx("js.fehler_3") + t.error
@@ -1079,6 +1099,7 @@ async function refresh() {
       (st.names || []).filter((n) => has(n.profile, pid)).map((n) => n.name + "." + n.domain)[0];
     // a base name without profile follows the active tunnel (as before 0.27.8)
     const actName = nameOf(act.id) || (!st.myaddr.profile ? st.myaddr.fqdn : "");
+    const actRate = rate("active", act.id, p.rx, p.tx, st.time);
     $("s-proton").innerHTML = "<h3>" + esc(tx("js.tunnel_aktiv")) + "</h3><dl>" + dl([
       [tx("js.profil"), (p.profile_name || "-") + profPos(p, act.id)],
       [tx("vpn.status"), p.up ? tx("js.aktiv") : tx("js.tunnel_lauft_nicht")],
@@ -1090,7 +1111,7 @@ async function refresh() {
       actName && p.port ? [tx("js.erreichbar"), "https://" + actName + ":" + p.port] : null,
       [tx("js.handshake"), p.up ? age(p.handshake) : tx("js.tunnel_lauft_nicht")], [tx("js.endpoint"), p.endpoint || p.config_endpoint || "-"],
       [tx("js.transfer"), tx("js.rx") + bytes(p.rx) + tx("js.tx") + bytes(p.tx)],
-      speedRow(rate("active", act.id, p.rx, p.tx, st.time)),
+      speedRow(actRate), testRow((p.speedtest || {}).active, act.id, actRate),
       ["MTU", mtuText(p)], p.error ? [tx("js.fehler"), p.error] : null]) + "</dl>" + standbyBlock(p.failover && p.failover.standby_tunnel, nameOf, p, st.time);
   }
   const b = st.backend;
@@ -1160,6 +1181,8 @@ document.querySelectorAll("button[data-action]").forEach((btn) => btn.addEventLi
     else if (name === "ddns-update" && r.queued) msg(out, "warn", esc(r.skipped));
     else if (name === "ddns-update") msg(out, r.ok ? "ok" : "err", r.ok ? (r.ip ? tx("js.a_eintrag_gesetzt") + esc(r.ip) : esc(r.skipped || "ok"))
       : esc(r.error || r.skipped || tx("js.fehler")));
+    else if (name.startsWith("speedtest-")) msg(out, r.ok ? "ok" : "err", r.ok
+      ? esc(r.name || "") + ": ↓ " + bits(r.down) + " / ↑ " + bits(r.up) : esc(r.error || tx("js.fehler")));
     else if (name === "cert-deliver") msg(out, r.ok ? "ok" : "err", resultsText(r));
     else if (name === "redirect-run" && r.queued) msg(out, "warn", esc(r.message));
     else if (name === "redirect-run") msg(out, r.ok ? "ok" : "err", r.ok ? tx("js.redirect_gesetzt") + esc(r.target) + " (" + esc(r.detail) + ")" : esc(r.error || tx("js.fehler")));
@@ -1255,6 +1278,7 @@ async function refreshRedirect() {
     S.redirFilled = true;
     document.querySelector('input[name=r-prov][value="' + (r.provider || "") + '"]').checked = true;
     $("r-status").value = String(r.status || 302);
+    $("r-mode").value = r.mode || "failover";
     $("r-port").value = r.fixed_port || ""; $("r-zone").value = r.cf.zone || "";
     S.rulesCtx = { active: r.active_name || "", bound: r.profile_names || [], endpoints: r.endpoints || [], entries: (st.names || []).filter((n) => n.role === "entry").sort(byNameOrder).map((n) => n.name + "." + n.domain) };
     $("r-rules").innerHTML = "";
@@ -1314,7 +1338,7 @@ document.querySelectorAll("button[data-example]").forEach((btn) => btn.addEventL
   try { $("r-text").value = (await api("GET", "/api/redirect/example/" + btn.dataset.example)).script; } catch (e) { msg("r-msg", "err", esc(e.message)); }
 }));
 $("r-save").addEventListener("click", (ev) => busy(ev.target, async () => {
-  const body = { provider: document.querySelector("input[name=r-prov]:checked").value, status: Number($("r-status").value), fixed_port: $("r-port").value.trim(),
+  const body = { provider: document.querySelector("input[name=r-prov]:checked").value, mode: $("r-mode").value, status: Number($("r-status").value), fixed_port: $("r-port").value.trim(),
     cf: { zone: $("r-zone").value.trim(), token: $("r-token").value.trim() }, gen: genOf(),
     rules: [...document.querySelectorAll("#r-rules tr")].map(ruleOf) };
   if (body.provider === "script" && !body.gen.kind) body.script = $("r-text").value;
