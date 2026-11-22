@@ -387,7 +387,7 @@ class Agent:
     def profile_exit_ip(self, pid):
         """Exit IP of the tunnel that runs profile ``pid`` (active or standby), ``""`` if none.
         0.25.0: ``pid`` may name several profiles (``"p1,p2"`` or a list): the active one of them wins, else
-        the standby."""
+        the standby. For the myaddr names use ``name_exit_ip`` (0.27.8): it never gives both tunnels one name."""
         from .myaddr import pids
         ids = pids(pid)
         if not ids or not self._proton_on():
@@ -397,6 +397,84 @@ class Agent:
         s = self.standby.state
         if s.get("profile") in ids and self.net.link_exists(s.get("iface") or ""):
             return s.get("exit_ip") or ""
+        return ""
+
+    def running_tunnels(self):
+        """``[(role, profile id, exit ip)]`` of the tunnels that run now: ``active`` first, then ``standby``."""
+        if not self._proton_on():
+            return []
+        out = []
+        act = (self.active_profile() or {}).get("id")
+        if act and self.vpn_exit_ip():
+            out.append(("active", act, self.vpn_exit_ip()))
+        s = self.standby.state
+        if s.get("profile") and s.get("profile") != act and s.get("exit_ip") and \
+                self.net.link_exists(s.get("iface") or ""):
+            out.append(("standby", s["profile"], s["exit_ip"]))
+        return out
+
+    def tunnel_names(self):
+        """Which myaddr name serves which running tunnel (0.27.8, owner): a name may belong to several profiles,
+        but active and standby never share a name. Returns ``{role: key}`` with key ``"base"`` (main name) or a
+        name id; a role without a free name is missing.
+
+        Every way to give each tunnel a different name (or none) is tried. The best one serves the most tunnels,
+        the active one first, then keeps names on the address they already have (no needless DNS change), then
+        prefers names higher in the list."""
+        from .myaddr import mode_of, pids
+        tunnels = self.running_tunnels()
+        if not tunnels:
+            return {}
+        names = []  # (key, profile ids, address it has now)
+        m = self.store.section("myaddr")
+        if m.get("name") and m.get("profile") and mode_of(m) != "manual":
+            names.append(("base", set(pids(m["profile"])), m.get("last_ip", "")))
+        for n in self.names.items():
+            if n["role"] == "endpoint" and n.get("profile"):
+                names.append((n["id"], set(pids(n["profile"])), n.get("sent_ip", "")))
+        best, best_score = {}, None
+
+        def walk(i, used, pick):
+            nonlocal best, best_score
+            if i == len(tunnels):
+                order = {k: j for j, (k, _, _) in enumerate(names)}
+                byk = {k: sent for k, _, sent in names}
+                ips = dict((r, ip) for r, _, ip in tunnels)
+                score = (len(pick), "active" in pick,
+                         sum(1 for r, k in pick.items() if byk[k] == ips[r]),
+                         -sum(order[k] for k in pick.values()))
+                if best_score is None or score > best_score:
+                    best, best_score = dict(pick), score
+                return
+            role, pid, _ = tunnels[i]
+            walk(i + 1, used, pick)
+            for key, ids, _ in names:
+                if pid in ids and key not in used:
+                    pick[role] = key
+                    walk(i + 1, used | {key}, pick)
+                    del pick[role]
+
+        walk(0, frozenset(), {})
+        return best
+
+    def name_exit_ip(self, key):
+        """Exit IP for the myaddr name ``key`` (``"base"`` or a name id) that belongs to VPN profiles: the tunnel
+        it serves according to ``tunnel_names``, ``""`` if it serves none (then its record is left alone)."""
+        ips = {r: ip for r, _, ip in self.running_tunnels()}
+        for role, k in self.tunnel_names().items():
+            if k == key:
+                return ips.get(role, "")
+        return ""
+
+    def tunnel_fqdn(self, role):
+        """``name.domain`` that serves the ``active`` or ``standby`` tunnel, ``""`` if none."""
+        key = self.tunnel_names().get(role)
+        if key == "base":
+            m = self.store.section("myaddr")
+            return "%s.%s" % (m["name"], m.get("domain"))
+        for n in self.names.items():
+            if n["id"] == key:
+                return "%s.%s" % (n["name"], n["domain"])
         return ""
 
     def promote_standby(self):
@@ -766,7 +844,8 @@ class Agent:
                         if k in ("ok", "tcp", "tls", "latency_ms", "error", "checked", "sni")})
         m = st.get("myaddr") or {}
         myaddr = {"name": m.get("name", ""), "domain": m.get("domain", ""), "fqdn": self.fqdn(),
-                  "key_set": bool(m.get("key")), "profile": m.get("profile", "")}
+                  "key_set": bool(m.get("key")), "profile": m.get("profile", ""),
+                  "tunnel_names": {r: self.tunnel_fqdn(r) for r in ("active", "standby")}}
         out = {"version": self.version, "time": now, "setup": self.setup_state(), "proton": proton,
                "backend": backend, "myaddr": myaddr, "ddns": self.ddns.status(), "names": self.names.status(), "cert": self.certs.status(),
                "delivery": self.certs.delivery_status(), "redirect": self.redirect.status(), "net": dict(self.rt["net"]),

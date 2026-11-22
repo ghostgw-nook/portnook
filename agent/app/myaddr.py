@@ -162,7 +162,14 @@ class Ddns:
             ip = cfg.get("manual_ip") or ""
             return (ip, "manual", "") if ip else ("", "", "Keine manuelle IP gesetzt: kein Update")
         # 0.22.0: the base name can belong to a VPN profile like any other name: then always that exit IP
-        ip = self.agent.profile_exit_ip(cfg["profile"]) if cfg.get("profile") else self.agent.vpn_exit_ip()
+        if cfg.get("profile"):
+            # 0.27.8: the tunnel this name serves; active and standby never share one name
+            ip = self.agent.name_exit_ip("base")
+            if not ip and self.agent.running_tunnels():
+                return "", "", ("Kein freier Tunnel für die VPN-Profile dieses Namens (die laufenden Tunnel haben "
+                                "schon einen Namen): kein Update, alter Eintrag bleibt")
+        else:
+            ip = self.agent.vpn_exit_ip()
         if ip:
             return ip, "vpn", ""
         if cfg.get("fallback_ip"):
@@ -253,6 +260,8 @@ class Names:
       IP of that profile's tunnel (active or standby), and the redirect uses it while that profile is active.
       0.25.0 (owner): a name may belong to several profiles (``"p1,p2"``); its A record follows the one of them
       that is active, else the one that is the standby (ready to take over).
+      0.27.8 (owner): active and standby never share a name; ``Agent.tunnel_names`` gives each running tunnel
+      its own name, a name that serves no tunnel keeps its record.
 
     Every name gets an update when its address changes and at least every 30 days (myaddr deletes idle names).
     The second name of the redirect page (before 0.13.0) becomes the first ``entry`` name.
@@ -300,10 +309,7 @@ class Names:
             n = {"id": old.get("id") or self._new_id(cur, out), "name": name, "domain": domain, "role": role,
                  "cert": bool(row.get("cert", True))}  # 0.20.1: in the certificate (with *.), per name
             pid = check_pids(self.agent, row.get("profile"), "%s.%s" % (name, domain)) if role == "endpoint" else ""
-            if pid:
-                taken = {i for x in out for i in pids(x.get("profile"))} | set(pids(body.get("_main_profile")))
-                if taken & set(pids(pid)):
-                    raise ValidationError("Ein VPN-Profil kann nur einen eigenen Namen haben.")
+            if pid:  # 0.27.8 (owner): several names may share profiles; Agent.tunnel_names keeps them apart
                 n["profile"] = pid
             if role == "entry":
                 ip = validate.ipv4(row.get("ip"), "IP des Eingangs-Hosts")
@@ -392,11 +398,18 @@ class Names:
         if n["role"] == "entry":
             return n.get("ip", "")
         if n.get("profile"):
-            return self.agent.profile_exit_ip(n["profile"])  # 0.19.0: the exit IP of that profile's tunnel (0.25.0: of several)
+            # 0.19.0: the exit IP of that profile's tunnel; 0.27.8: of the tunnel this name serves (never both)
+            return self.agent.name_exit_ip(n["id"])
         return self.agent.ddns.resolve()[0]
 
     def for_profile(self, pid):
-        """``name.domain`` of the endpoint name that belongs to profile ``pid``, ``""`` if none."""
+        """``name.domain`` of the endpoint name that belongs to profile ``pid``, ``""`` if none.
+        0.27.8: for a running profile the name that serves its tunnel (``Agent.tunnel_names``)."""
+        for role, rpid, _ in self.agent.running_tunnels():
+            if rpid == pid:
+                fqdn = self.agent.tunnel_fqdn(role)
+                if fqdn:
+                    return fqdn
         m = self.agent.store.section("myaddr")
         if pid and m.get("name") and pid in pids(m.get("profile")):
             return "%s.%s" % (m["name"], m.get("domain"))

@@ -1047,9 +1047,15 @@ async function refresh() {
   } else {
     dot("d-proton", L.proton === "ok" && L.natpmp !== "ok" && L.natpmp !== "unknown" ? LCLASS[L.natpmp] : lk("proton"));
     const has = (v, pid) => String(v || "").split(",").includes(pid);
-    const nameOf = (pid) => (pid && has(st.myaddr.profile, pid) ? st.myaddr.fqdn : "") ||
-      (st.names || []).filter((n) => has(n.profile, pid)).map((n) => n.name + "." + n.domain)[0];
     const act = (p.profiles || []).find((x) => x.active) || {};
+    // 0.27.8: the name that serves the tunnel (active and standby never share one); else the first name of the profile
+    const tn = st.myaddr.tunnel_names || {};
+    const sbPid = ((p.failover && p.failover.standby_tunnel) || {}).profile;
+    const nameOf = (pid) => pid && pid === act.id ? tn.active || "" : pid && pid === sbPid ? tn.standby || "" :
+      (pid && has(st.myaddr.profile, pid) ? st.myaddr.fqdn : "") ||
+      (st.names || []).filter((n) => has(n.profile, pid)).map((n) => n.name + "." + n.domain)[0];
+    // a base name without profile follows the active tunnel (as before 0.27.8)
+    const actName = nameOf(act.id) || (!st.myaddr.profile ? st.myaddr.fqdn : "");
     $("s-proton").innerHTML = "<h3>" + esc(tx("js.tunnel_aktiv")) + "</h3><dl>" + dl([
       [tx("js.profil"), (p.profile_name || "-") + profPos(p, act.id)],
       [tx("vpn.status"), p.up ? tx("js.aktiv") : tx("js.tunnel_lauft_nicht")],
@@ -1058,7 +1064,7 @@ async function refresh() {
       [tx("vpn.server"), p.server || "-"], [tx("js.schnittstelle"), p.iface || "-"], [tx("js.exit_ip"), p.exit_ip || tx("js.unbekannt")],
       p.provider === "fixed" ? [tx("js.ports"), (p.ports || []).join(", ") + tx("js.fest_tcp")]
         : [tx("js.port"), p.port ? String(p.port) + tx("js.nat_pmp_tcp") : tx("js.unbekannt") + (p.natpmp && p.natpmp.error ? " (" + p.natpmp.error + ")" : "")],
-      st.myaddr.fqdn && p.port ? [tx("js.erreichbar"), "https://" + (nameOf(act.id) || st.myaddr.fqdn) + ":" + p.port] : null,
+      actName && p.port ? [tx("js.erreichbar"), "https://" + actName + ":" + p.port] : null,
       [tx("js.handshake"), p.up ? age(p.handshake) : tx("js.tunnel_lauft_nicht")], [tx("js.endpoint"), p.endpoint || p.config_endpoint || "-"],
       [tx("js.transfer"), tx("js.rx") + bytes(p.rx) + tx("js.tx") + bytes(p.tx)],
       ["MTU", mtuText(p)], p.error ? [tx("js.fehler"), p.error] : null]) + "</dl>" + standbyBlock(p.failover && p.failover.standby_tunnel, nameOf, p);

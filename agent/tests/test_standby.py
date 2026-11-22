@@ -276,11 +276,45 @@ class StandbyFlowTest(unittest.TestCase):
         self.assertEqual(self.agent.standby.state["profile"], "p2")
         self.assertEqual(self.agent.names.ip_for(n["muster-ch"]), EXIT["p2"])  # neither active: the standby
         self.assertEqual(self.agent.redirect.active_name(), "muster-is.myaddr.tools")
-        with self.assertRaises(validate.ValidationError):  # a profile belongs to one name only
-            self.agent.names.save_all({"names": [
-                {"id": "main", "name": "familie-muster", "domain": "myaddr.tools", "role": "endpoint", "profile": "p2"},
-                {"id": n["muster-ch"]["id"], "name": "muster-ch", "domain": "myaddr.tools", "role": "endpoint",
-                 "profile": "p1,p2"}]})
+
+    def test_active_and_standby_never_share_a_name(self):
+        """0.27.8 (owner): names may share profiles; the active tunnel and the standby always get different names."""
+        self.apply()
+        self.agent.standby.cycle()
+        act, sb = self.agent.active_profile()["id"], self.agent.standby.state["profile"]
+        self.agent.names.save_all({"names": [
+            {"id": "main", "name": "familie-muster", "domain": "myaddr.tools", "role": "endpoint", "key": "A" * 43},
+            {"name": "muster-a", "domain": "myaddr.tools", "role": "endpoint", "key": "B" * 43, "profile": "%s,%s" % (act, sb)},
+            {"name": "muster-b", "domain": "myaddr.tools", "role": "endpoint", "key": "C" * 43, "profile": "%s,%s" % (act, sb)}]})
+        n = {x["name"]: x for x in self.agent.names.items()}
+        a_ip, b_ip = self.agent.names.ip_for(n["muster-a"]), self.agent.names.ip_for(n["muster-b"])
+        self.assertEqual({a_ip, b_ip}, {EXIT[act], EXIT[sb]})  # one name each, never the same
+        self.assertEqual(a_ip, EXIT[act])  # the active tunnel gets the first free name
+        self.assertEqual(self.agent.names.for_profile(act), "muster-a.myaddr.tools")
+        self.assertEqual(self.agent.names.for_profile(sb), "muster-b.myaddr.tools")
+        self.assertEqual(self.agent.redirect.active_name(), "muster-a.myaddr.tools")
+        tn = self.agent.status()["myaddr"]["tunnel_names"]
+        self.assertEqual(tn, {"active": "muster-a.myaddr.tools", "standby": "muster-b.myaddr.tools"})
+        # names keep their address after a switch: the former standby name now serves the active tunnel
+        extra = self.agent.store.section("myaddr")["extra"]
+        for x in extra:
+            x["sent_ip"] = self.agent.names.ip_for(x)  # as after the DNS updates
+        self.agent.store.update("myaddr", {"extra": extra})
+        self.fo.activate(sb, "manual")
+        self.assertEqual(self.agent.active_profile()["id"], sb)
+        self.assertEqual(self.agent.redirect.active_name(), "muster-b.myaddr.tools")
+
+    def test_name_without_free_tunnel_keeps_record(self):
+        """0.27.8: two tunnels, one shared name: it serves the active tunnel, the standby has no name."""
+        self.apply()
+        self.agent.standby.cycle()
+        act, sb = self.agent.active_profile()["id"], self.agent.standby.state["profile"]
+        self.agent.names.save_all({"names": [
+            {"id": "main", "name": "familie-muster", "domain": "myaddr.tools", "role": "endpoint", "key": "A" * 43},
+            {"name": "muster-a", "domain": "myaddr.tools", "role": "endpoint", "key": "B" * 43,
+             "profile": "%s,%s" % (act, sb)}]})
+        self.assertEqual(self.agent.status()["myaddr"]["tunnel_names"], {"active": "muster-a.myaddr.tools", "standby": ""})
+        self.assertEqual(self.agent.names.for_profile(sb), "muster-a.myaddr.tools")  # fallback: first name of it
 
     def test_base_name_not_moved_by_order(self):
         """0.24.0: the UI sends the names sorted alphabetically; the current base name stays the base name."""
