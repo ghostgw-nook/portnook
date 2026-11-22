@@ -258,8 +258,6 @@ h3 { font-size: 14px; margin: 16px 0 4px; }
       <button type="button" data-action="backend-test">{{status.backend_testen}}</button>
       <button type="button" data-action="natpmp-renew">{{status.nat_pmp_erneuern}}</button>
       <button type="button" data-action="ddns-update">{{status.ddns_jetzt_aktualisieren}}</button>
-      <button type="button" data-action="speedtest-active">{{status.speedtest_aktiv}}</button>
-      <button type="button" data-action="speedtest-standby">{{status.speedtest_reserve}}</button>
     </div>
     <div id="action-msg"></div>
   </div>
@@ -685,14 +683,36 @@ function speedRow(r) {
   return [tx("js.aktuell"), r ? tx("js.rx") + bits(r.rx) + tx("js.tx") + bits(r.tx) : tx("js.wird_gemessen")];
 }
 // 0.28.0: last speed test of this tunnel (same profile) and how full the line is now (current tx of the test's up)
-function testRow(t, prof, r) {
-  if (!t || t.profile !== prof) return [tx("js.speedtest"), tx("js.speedtest_noch_nie")];
-  if (!t.ok) return [tx("js.speedtest"), tx("js.fehler") + ": " + esc(t.error || "") + " (" + age(t.time) + ")"];
-  let v = "↓ " + bits(t.down) + " / ↑ " + bits(t.up) + " (" + age(t.time) + ")";
-  if (r && t.up && t.down) v += " · " + tx("js.auslastung") + " ↑ " + Math.min(100, Math.round(r.tx * 100 / t.up)) +
-    " % / ↓ " + Math.min(100, Math.round(r.rx * 100 / t.down)) + " %";
-  return [tx("js.speedtest"), v];
+function testRow(t, prof, r, role) {
+  const busyNow = (S.speedBusy || {})[role], err = (S.speedErr || {})[role];
+  const btn = ' <button type="button" class="small speedbtn" data-speed="' + role + '"' + (busyNow ? " disabled" : "") + ">" +
+    esc(tx(busyNow ? "js.wird_gemessen" : "js.speedtest_starten")) + "</button>";
+  let v;
+  if (err) v = tx("js.fehler") + ": " + err;
+  else if (!t || t.profile !== prof) v = tx("js.speedtest_noch_nie");
+  else if (!t.ok) v = tx("js.fehler") + ": " + (t.error || "") + " (" + age(t.time) + ")";
+  else {
+    v = "↓ " + bits(t.down) + " / ↑ " + bits(t.up) + " (" + age(t.time) + ")";
+    if (r && t.up && t.down) v += " · " + tx("js.auslastung") + " ↑ " + Math.min(100, Math.round(r.tx * 100 / t.up)) +
+      " % / ↓ " + Math.min(100, Math.round(r.rx * 100 / t.down)) + " %";
+  }
+  return [tx("js.speedtest"), esc(v) + btn, true];
 }
+// speed test buttons sit in the tunnel blocks, which are redrawn on every refresh: keep the state in S
+document.addEventListener("click", async (ev) => {
+  const b = ev.target.closest && ev.target.closest("button[data-speed]");
+  if (!b || b.disabled) return;
+  const role = b.dataset.speed;
+  S.speedBusy = Object.assign(S.speedBusy || {}, { [role]: true });
+  S.speedErr = Object.assign(S.speedErr || {}, { [role]: "" });
+  b.disabled = true; b.textContent = tx("js.wird_gemessen");
+  try {
+    const r = await api("POST", "/api/action/speedtest-" + role, {});
+    if (!r.ok) S.speedErr[role] = r.error || tx("js.fehler");
+  } catch (e) { S.speedErr[role] = e.message; }
+  S.speedBusy[role] = false;
+  if (REFRESH[S.view]) REFRESH[S.view]();
+});
 function bytes(n) {
   if (!n) return "0 B";
   const u = ["B", "KiB", "MiB", "GiB", "TiB"]; let i = 0;
@@ -881,7 +901,7 @@ function standbyBlock(sb, nameOf, p, now) {
     [tx("js.handshake"), sb.handshake_age != null ? age(Math.floor(Date.now() / 1000) - sb.handshake_age) : tx("js.tunnel_lauft_nicht")],
     [tx("js.endpoint"), sb.endpoint || sb.config_endpoint || "-"],
     [tx("js.transfer"), tx("js.rx") + bytes(sb.rx) + tx("js.tx") + bytes(sb.tx)],
-    speedRow(sbRate), testRow(((p.speedtest || {}).standby), sb.profile, sbRate),
+    speedRow(sbRate), testRow(((p.speedtest || {}).standby), sb.profile, sbRate, "standby"),
     ["MTU", mtuText(sb)], sb.error && sb.ready ? [tx("js.fehler"), sb.error] : null]) + "</dl>";
 }
 function standbyRow(sb) {
@@ -1111,7 +1131,7 @@ async function refresh() {
       actName && p.port ? [tx("js.erreichbar"), "https://" + actName + ":" + p.port] : null,
       [tx("js.handshake"), p.up ? age(p.handshake) : tx("js.tunnel_lauft_nicht")], [tx("js.endpoint"), p.endpoint || p.config_endpoint || "-"],
       [tx("js.transfer"), tx("js.rx") + bytes(p.rx) + tx("js.tx") + bytes(p.tx)],
-      speedRow(actRate), testRow((p.speedtest || {}).active, act.id, actRate),
+      speedRow(actRate), testRow((p.speedtest || {}).active, act.id, actRate, "active"),
       ["MTU", mtuText(p)], p.error ? [tx("js.fehler"), p.error] : null]) + "</dl>" + standbyBlock(p.failover && p.failover.standby_tunnel, nameOf, p, st.time);
   }
   const b = st.backend;
@@ -1181,8 +1201,6 @@ document.querySelectorAll("button[data-action]").forEach((btn) => btn.addEventLi
     else if (name === "ddns-update" && r.queued) msg(out, "warn", esc(r.skipped));
     else if (name === "ddns-update") msg(out, r.ok ? "ok" : "err", r.ok ? (r.ip ? tx("js.a_eintrag_gesetzt") + esc(r.ip) : esc(r.skipped || "ok"))
       : esc(r.error || r.skipped || tx("js.fehler")));
-    else if (name.startsWith("speedtest-")) msg(out, r.ok ? "ok" : "err", r.ok
-      ? esc(r.name || "") + ": ↓ " + bits(r.down) + " / ↑ " + bits(r.up) : esc(r.error || tx("js.fehler")));
     else if (name === "cert-deliver") msg(out, r.ok ? "ok" : "err", resultsText(r));
     else if (name === "redirect-run" && r.queued) msg(out, "warn", esc(r.message));
     else if (name === "redirect-run") msg(out, r.ok ? "ok" : "err", r.ok ? tx("js.redirect_gesetzt") + esc(r.target) + " (" + esc(r.detail) + ")" : esc(r.error || tx("js.fehler")));
