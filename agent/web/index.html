@@ -67,6 +67,7 @@ button { font: inherit; padding: 8px 14px; border-radius: 7px; border: 1px solid
   background: var(--card); color: var(--fg); }
 button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 button:disabled { opacity: .55; cursor: progress; }
+button.off:disabled { opacity: .3; cursor: default; }
 .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
 .choice { display: flex; gap: 10px; flex-wrap: wrap; }
 .choice label { font-weight: 500; display: flex; gap: 8px; align-items: center; padding: 8px 12px; margin: 0;
@@ -1611,15 +1612,15 @@ $("pc-off").addEventListener("click", (ev) => {
 function renderProfiles(p) {
   const list = p.profiles || [];
   S.profiles = list;
-  const b = (kind, id, text, title) => '<button type="button" data-vp="' + kind + '" data-id="' + esc(id) + '"' +
-    (title ? ' title="' + title + '"' : "") + ">" + text + "</button>";
+  const b = (kind, id, text, title, off) => '<button type="button" data-vp="' + kind + '" data-id="' + esc(id) + '"' +
+    (title ? ' title="' + title + '"' : "") + (off ? ' class="off" disabled' : "") + ">" + text + "</button>";
   $("vp-list").innerHTML = list.length ? list.map((x, i) =>
     "<tr><td>" + (i + 1) + "</td><td>" + esc(x.name) + "</td><td>" +
     (x.provider === "fixed" ? tx("js.fester_port_2") + esc(x.ports.join(", ")) : tx("vpn.proton_nat_pmp")) +
     (x.mtu_effective ? tx("js.br_span_class_muted_small") + x.mtu_effective + (x.mtu === "conf" ? tx("js.konfiguration") : "") + "</span>" : "") + "</td><td>" +
     esc(x.server || x.endpoint || "-") + "</td><td>" + (x.active && p.enabled ? tx("js.b_aktiv_b") : x.standby && p.enabled ? tx("js.reserve") + (x.standby_ready ? " (" + tx("js.bereit") + ")" : " - " + esc(x.standby_reason || tx("js.wird_aufgebaut"))) : x.enabled ? tx("js.bereit") : tx("js.aus")) +
     '</td><td><div class="row" style="margin:0">' +
-    (i > 0 ? b("up", x.id, "&uarr;", tx("js.hoher")) : "") + (i < list.length - 1 ? b("down", x.id, "&darr;", tx("js.tiefer")) : "") +
+    b("up", x.id, "&uarr;", tx("js.hoher"), i === 0) + b("down", x.id, "&darr;", tx("js.tiefer"), i === list.length - 1) +
     b("edit", x.id, tx("js.bearbeiten")) + (!x.active && x.enabled && p.enabled ? b("activate", x.id, tx("js.aktivieren")) : "") +
     b("delete", x.id, tx("js.loschen")) + "</div></td></tr>").join("")
     : tx("js.tr_td_colspan_6_class");
