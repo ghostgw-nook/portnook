@@ -174,7 +174,8 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(self.store.section("myaddr")["key"], MYKEY)
         st = self.req("GET", "/api/status")[1]
         self.assertEqual(st["myaddr"], {"name": "familie-muster", "domain": "myaddr.dev",
-                                        "fqdn": "familie-muster.myaddr.dev", "key_set": True, "profile": ""})
+                                        "fqdn": "familie-muster.myaddr.dev", "key_set": True, "profile": "",
+                                        "tunnel_names": {"active": "", "standby": ""}})
         self.assertNotIn(MYKEY, json.dumps(st))
         self.assertNotIn(MYKEY, json.dumps(self.req("GET", "/api/logs")[1]))
 
