@@ -19,6 +19,7 @@ render() { # $1 = svg name, $2 = png name, $3 = width, $4 = height
 render portnook portnook 512 512
 render portnook-wordmark portnook-wordmark 1280 320
 render portnook-icon portnook-icon 256 256
+render portnook-social portnook-social 1280 640
 docker run --rm -v "$WORK:/out" "$OPT_IMAGE" sh -c \
   'apk add -q --no-cache pngquant >/dev/null && cd /out && for f in *.png; do pngquant --force --skip-if-larger --quality 80-98 --strip --output "$f" "$f" || true; done'
 cp "$WORK"/*.png "$LOGO"/
