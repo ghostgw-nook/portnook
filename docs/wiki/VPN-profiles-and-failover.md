@@ -25,7 +25,9 @@ tunnel. With Proton the standby needs a second device slot (one WireGuard file p
 - The active tunnel is checked every 30 s: tunnel up, handshake younger than 3 minutes, NAT-PMP answers (Proton)
   or the exit IP can be read through the tunnel (fixed port).
 - After **2 failed checks in a row** (adjustable; after the first failure every 5 s) the standby takes over at
-  once: no rebuild, port and exit IP are known, DDNS and redirect follow right away.
+  once: no rebuild, port and exit IP are known, DDNS and redirect follow right away. For a switch without DNS
+  wait give each profile its own name (see [One name per profile](#one-name-per-profile)); a name shared by
+  several profiles is updated on the switch, and clients may keep the old IP for a few minutes (DNS cache).
 - The failed profile is then rebuilt as the new standby.
 - If all profiles fail, traffic stays blocked (kill switch, never over your home line) and the status is red.
   Push messages are the one exception: they always go directly over the home line, so the "all VPNs down"

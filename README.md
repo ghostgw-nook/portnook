@@ -55,7 +55,9 @@ und das Log. Dazu Knöpfe für Proton neu verbinden, NAT-PMP erneuern, Backend t
   kein Zertifikat).
 - **Mehrere VPN-Profile mit Failover und Reserve-Tunnel:** neben dem aktiven VPN läuft ein zweites Profil dauernd
   als Reserve, mit eigenem Port, eigener Exit-IP und auf Wunsch eigenem myaddr-Namen. Fällt das aktive aus,
-  übernimmt die Reserve sofort, ohne Neuaufbau und ohne DNS-Wechsel; der Redirect zeigt gleich auf sie. Die
+  übernimmt die Reserve sofort, ohne Neuaufbau. Ohne DNS-Wartezeit geht das nur mit einem zweiten DNS-Namen: Hat
+  die Reserve ihren eigenen myaddr-Namen, zeigt der Redirect gleich auf ihn. Teilen sich beide Profile einen Namen,
+  muss er erst umgestellt werden; bis die Clients die neue IP kennen, kann es einige Minuten dauern (DNS-Cache). Die
   Reihenfolge der Liste ist eine feste Priorität. Ein Name kann auch mehreren Profilen folgen (dem aktiven, sonst
   der Reserve). Sind alle gestört, geht ausser Push-Meldungen nichts über die Heimleitung.
 - **Andere VPN-Anbieter:** neben Proton (NAT-PMP) jede WireGuard-Datei eines Anbieters mit festen, im Kundenkonto
@@ -220,32 +222,3 @@ derselben Lizenz zugänglich machen.
 Für dieses Repository erledigt: Einstellungen 1–4, echte Tests (`tests.yml`: Unit-Tests,
 Image-Smoke-Checks, End-to-end-Test `.github/scripts/e2e.sh` mit pebble als ACME-Server), Image-Build und Push
 nach GHCR (`build.yml`, plus wöchentlicher Rebuild), Dependabot für `github-actions` und `docker`.
-
-## Notes for AI assistants
-
-- Work on `claude/**` branches only; `auto-merge.yml` merges into `main` after green tests.
-- Every change to the container (`agent/Dockerfile`, `entrypoint.sh`, `app/`, `web/`, `examples/`) bumps `VERSION`
-  (fix: patch, feature: minor); optional notes in `.github/release-notes/X.Y.Z.md`. Changes to docs, README,
-  screenshots, wiki, Unraid template or workflows keep `VERSION`: no tag, no release, no new image, and the
-  image and e2e tests are skipped for docs-only changes.
-- Code, comments, docs, commits and logs in English. **Exception (owner decision, 0.7.1):** `README.md` and
-  `docs/installation.md` are written in German (Swiss spelling, no ß) for the users; keep them German.
-  `README.en.md` is the English README; keep both READMEs in sync.
-- The GitHub wiki is English. Its source is `docs/wiki/` (one `.md` per page, `_Sidebar.md`); after changing it,
-  push the files to `https://github.com/ghostgw-nook/portnook.wiki.git`.
-- Wiki pages are bound to versions (owner decision 2026-11-22): each page has an `> **Applies to:** portnook X.Y (edition)`
-  line. When a change alters UI or behaviour described on a page, update the page, move its line to the new X.Y
-  and update the page history in `docs/wiki/Versions.md` (`agent/tests/test_wiki.py` checks the lines). Older
-  editions stay readable at `tree/vX.Y.Z/docs/wiki`. The current edition is **rc1** (0.27). The repository is
-  public: code, docs, wiki, screenshots, commits and release notes must never contain private data (real names,
-  addresses, hostnames, IPs, keys); use example values such as `familie-muster` and `example.ch`.
-- Screenshots: regenerate with `.github/scripts/screenshots.sh` (example values only, no real data) after UI
-  changes; logos: edit the SVGs in `docs/images/logo/`, then run `.github/scripts/logos.sh`.
-- The project is the standalone home agent only (owner decision 2026-11-18); there is no VPS part. Do not add
-  one; see the decision log in `docs/concept.md`.
-- Renamed from pf-agent to portnook in 0.27.0. Keep the compatibility for existing installs: Cloudflare rules
-  named `pf-agent redirect <host>` are taken over (`LEGACY_RULE_PREFIX` in `agent/app/redirect.py`); stored NPM
-  certificate names are kept.
-- Secrets (myaddr keys, NPM password, Cloudflare token, pull token, SSH and certificate keys) are write-only in
-  the API/UI and never logged.
-- Propose larger changes first; build after the owner's OK.
