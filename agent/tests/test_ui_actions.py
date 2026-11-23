@@ -18,6 +18,9 @@ class UiActionsTest(unittest.TestCase):
         used |= {"speedtest-" + r for r in re.findall(r'testRow\([^\n]*"([a-z0-9-]+)"\)', html)}
         self.assertTrue(used)
         self.assertEqual(set(), used - allowed)
+        # 0.29.3: the route must accept every allowed name (digits in "speedtest-active-1" gave a 404)
+        rx = re.search(r'_ACTION_RE = re\.compile\(r"(.+?)"\)', src).group(1)
+        self.assertEqual([], [a for a in allowed if not re.fullmatch(rx, "/api/action/" + a)])
 
 
 if __name__ == "__main__":

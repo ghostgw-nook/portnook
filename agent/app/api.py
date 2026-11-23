@@ -21,7 +21,7 @@ ACTIONS = ("proton-reconnect", "natpmp-renew", "backend-test", "ddns-update", "c
 _EXAMPLE_RE = re.compile(r"/api/redirect/example/([a-z-]{1,32})")
 _LANG_RE = re.compile(r"[a-z]{2}(-[A-Z]{2})?\.json")
 _DOWNLOAD_RE = re.compile(r"/api/cert/download/([a-z.]{1,20})")
-_ACTION_RE = re.compile(r"/api/action/([a-z-]{1,32})")
+_ACTION_RE = re.compile(r"/api/action/([a-z0-9-]{1,32})")
 
 
 class Server(socketserver.ThreadingMixIn, http.server.HTTPServer):
