@@ -88,7 +88,7 @@ button.off:disabled { opacity: .3; cursor: default; }
 .grid.status > .card > div > .tiles { flex: 1; align-content: start; }
 .grid.status > .card { grid-column: span 2; }
 .grid.status > .card.wide { grid-column: span 3; }
-@media (max-width: 1100px) { .grid.status { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+@media (max-width: 1100px) { .grid.status { grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); }
   .grid.status > .card, .grid.status > .card.wide { grid-column: auto; } }
 dl { display: grid; grid-template-columns: max-content 1fr; gap: 3px 12px; margin: 0; font-size: 14px; }
 dt { color: var(--muted); }
@@ -107,7 +107,9 @@ pre.log { background: var(--code); border-radius: 7px; padding: 10px; max-height
 .phead h1 { font-size: 21px; margin: 0; font-weight: 650; }
 .lead { color: var(--muted); margin: 0 0 16px; font-size: 14px; }
 /* 0.29.0 (owner): status tiles, a short summary that opens to every detail */
-.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 10px; align-items: stretch; }
+/* 0.29.4: no sideways scrolling on phones (tiles may shrink below 300px; clip as a last resort) */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; } html, body { overflow-x: clip; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 10px; align-items: stretch; }
 .tiles > details.tile[open] { grid-column: 1 / -1; }  /* an open tile takes the whole row, its details need the width */
 details.tile { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; background: var(--bg); min-width: 0; }
 details.tile > summary { list-style: none; cursor: pointer; }
