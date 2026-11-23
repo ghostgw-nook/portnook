@@ -80,7 +80,12 @@ button.off:disabled { opacity: .3; cursor: default; }
 .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
 .grid .card { margin-bottom: 0; }
 /* status page (0.27.6, owner): VPN and DDNS on top (2), backend, certificate and redirect below (3) */
-.grid.status { grid-template-columns: repeat(6, minmax(0, 1fr)); align-items: start; }
+.grid.status { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+/* 0.29.1 (owner): cards of a row equally high, a single tile fills its card */
+.grid.status > .card { display: flex; flex-direction: column; }
+.grid.status > .card > div { flex: 1; display: flex; flex-direction: column; }
+.grid.status > .card > div > details.tile { flex: 1; }
+.grid.status > .card > div > .tiles { flex: 1; align-content: start; }
 .grid.status > .card { grid-column: span 2; }
 .grid.status > .card.wide { grid-column: span 3; }
 @media (max-width: 1100px) { .grid.status { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
@@ -102,7 +107,7 @@ pre.log { background: var(--code); border-radius: 7px; padding: 10px; max-height
 .phead h1 { font-size: 21px; margin: 0; font-weight: 650; }
 .lead { color: var(--muted); margin: 0 0 16px; font-size: 14px; }
 /* 0.29.0 (owner): status tiles, a short summary that opens to every detail */
-.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 10px; align-items: start; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 10px; align-items: stretch; }
 .tiles > details.tile[open] { grid-column: 1 / -1; }  /* an open tile takes the whole row, its details need the width */
 details.tile { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; background: var(--bg); min-width: 0; }
 details.tile > summary { list-style: none; cursor: pointer; }
