@@ -206,6 +206,7 @@
  "js.reserve": "Standby",
  "js.reserve_gross": "Standby",
  "js.tunnel_aktiv": "Active tunnel",
+ "js.rr_rolle": "Active #{n} · round robin",
  "js.fehlt_noch": "Still missing (next order)",
  "js.keine_reserve": "no standby (only one profile switched on)",
  "js.schnittstelle": "Interface",

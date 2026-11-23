@@ -206,6 +206,7 @@
  "js.reserve": "Reserve",
  "js.reserve_gross": "Reserve",
  "js.tunnel_aktiv": "Aktiver Tunnel",
+ "js.rr_rolle": "Aktiv #{n} · Round Robin",
  "js.fehlt_noch": "Fehlt noch (nächste Bestellung)",
  "js.keine_reserve": "keine Reserve (nur ein Profil eingeschaltet)",
  "js.schnittstelle": "Schnittstelle",

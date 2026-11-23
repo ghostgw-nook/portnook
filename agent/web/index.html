@@ -925,13 +925,13 @@ function profPos(p, pid) {
   const all = p.profiles || [], i = all.findIndex((x) => x.id === pid);
   return all.length > 1 && i >= 0 ? " (" + (i + 1) + tx("js.von") + all.length + ")" : "";
 }
-function standbyBlock(sb, nameOf, p, now) {
+function standbyBlock(sb, nameOf, p, now, rr) {
   if (!sb || !sb.enabled) return "";
   if (!sb.profile) return tile("standby", "", tx("js.reserve_gross"), tx("js.keine_reserve"), "", [[tx("vpn.status"), tx("js.keine_reserve")]]);
   const name = nameOf(sb.profile);
   const sbRate = rate("standby", sb.profile, sb.rx, sb.tx, now);
   const url = name && sb.port ? "https://" + name + ":" + sb.port : "";
-  return tile("standby", sb.ready ? "ok" : "warn", tx("js.reserve_gross"), sb.profile_name || "-",
+  return tile("standby", sb.ready ? "ok" : "warn", rr && sb.ready ? tx("js.rr_rolle").replace("{n}", "2") : tx("js.reserve_gross"), sb.profile_name || "-",
     rateHtml(sbRate) + sumLines([[tx("js.erreichbar"), url || "-"], sb.ready ? null : [tx("vpn.status"), sb.reason || sb.error || tx("js.wird_aufgebaut")]]), [[tx("js.profil"), (sb.profile_name || "-") + profPos(p, sb.profile)],
     [tx("vpn.status"), sb.ready ? tx("js.bereit") : (sb.reason || sb.error || tx("js.wird_aufgebaut"))],
     [tx("vpn.art"), sb.provider === "fixed" ? tx("js.fester_port") : tx("vpn.proton_nat_pmp")],
@@ -1169,7 +1169,9 @@ async function refresh() {
     const actRate = rate("active", act.id, p.rx, p.tx, st.time);
     const actUrl = actName && p.port ? "https://" + actName + ":" + p.port : "";
     const actFail = p.failover && (p.failover.all_down || p.failover.fails_now);
-    $("s-proton").innerHTML = '<div class="tiles">' + tile("active", p.up && !actFail ? "ok" : p.up ? "warn" : "err", tx("js.tunnel_aktiv"), p.profile_name || "-",
+    // 0.29.2: in round robin both tunnels serve; the role shows the order (#1 active, #2 standby)
+    const rr = (st.redirect || {}).mode === "roundrobin" && (st.redirect || {}).rr === "on";
+    $("s-proton").innerHTML = '<div class="tiles">' + tile("active", p.up && !actFail ? "ok" : p.up ? "warn" : "err", rr ? tx("js.rr_rolle").replace("{n}", "1") : tx("js.tunnel_aktiv"), p.profile_name || "-",
       rateHtml(actRate) + sumLines([[tx("js.erreichbar"), actUrl || "-"], p.up ? null : [tx("vpn.status"), tx("js.tunnel_lauft_nicht")],
         actFail ? [tx("vpn.failover"), p.failover.all_down ? tx("js.alle_profile_gestort") : p.failover.fails_now + tx("js.fehlprufung_en") + (p.failover.reason || "")] : null]), [
       [tx("js.profil"), (p.profile_name || "-") + profPos(p, act.id)],
@@ -1184,7 +1186,7 @@ async function refresh() {
       [tx("js.transfer"), tx("js.rx") + bytes(p.rx) + tx("js.tx") + bytes(p.tx)],
       speedRow(actRate), testRow((p.speedtest || {}).active, act.id, actRate, "active"),
       testRow((p.speedtest || {})["active-1"], act.id, null, "active-1"),
-      ["MTU", mtuText(p)], p.error ? [tx("js.fehler"), p.error] : null]) + standbyBlock(p.failover && p.failover.standby_tunnel, nameOf, p, st.time) + "</div>";
+      ["MTU", mtuText(p)], p.error ? [tx("js.fehler"), p.error] : null]) + standbyBlock(p.failover && p.failover.standby_tunnel, nameOf, p, st.time, rr) + "</div>";
   }
   const b = st.backend;
   dot("d-backend", lk("backend"));
