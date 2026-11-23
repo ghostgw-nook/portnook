@@ -254,7 +254,7 @@ ROLES = ("entry", "endpoint")
 class Names:
     """More myaddr names besides the main one, each with a role (0.13.0):
 
-    * ``entry``: the stable entry (redirect/rewrite host), A record = fixed public IP of that host;
+    * ``entry``: the stable entry (redirect/rewrite host), A record = fixed IP of that host (0.30.1: also a LAN IP);
     * ``endpoint``: a further name of the connection, A record = the same address as the main name (VPN exit IP).
       0.19.0: an endpoint name may belong to a VPN profile (``profile``); its A record is then always the exit
       IP of that profile's tunnel (active or standby), and the redirect uses it while that profile is active.
@@ -312,9 +312,7 @@ class Names:
             if pid:  # 0.27.8 (owner): several names may share profiles; Agent.tunnel_names keeps them apart
                 n["profile"] = pid
             if role == "entry":
-                ip = validate.ipv4(row.get("ip"), "IP des Eingangs-Hosts")
-                if not ip.is_global:
-                    raise ValidationError("IP des Eingangs-Hosts muss öffentlich sein.")
+                ip = validate.ipv4(row.get("ip"), "IP des Eingangs-Hosts")  # 0.30.1: any IPv4, LAN too (owner)
                 n["ip"] = str(ip)
             if row.get("key"):
                 n["key"] = check_key(row["key"])

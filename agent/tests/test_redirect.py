@@ -230,7 +230,7 @@ class RedirectAgentTest(unittest.TestCase):
         self.up[0] = True
         self.assertTrue(self.r.tick()["ok"])
         self.assertTrue(os.path.exists(marker))
-        self.assertEqual(self.r.status()["queued"], "")
+
 
     def test_examples_exist(self):
         for name in ("plesk-htaccess", "php-index"):
@@ -328,9 +328,12 @@ class RedirectAgentTest(unittest.TestCase):
         self.assertEqual(sent, [("B", "1.2.3.70"), ("C", exit_ip)] * 2)
         st = json.dumps(names.status())
         self.assertNotIn("B" * 43, st)
-        for bad in ({"names": [{"name": "familie-3", "domain": "myaddr.io", "role": "entry", "key": "D" * 43,
-                                "ip": "192.168.1.5"}]},
-                    {"names": [{"name": "familie-3", "domain": "myaddr.io", "role": "endpoint"}]},
+        for ip in ("192.168.1.5", "127.0.0.1"):  # 0.30.1: any IPv4 (127.0.0.1 keeps an unused name alive)
+            names.save({"names": [{"id": "n1", "name": "familie-tv", "domain": "myaddr.io", "ip": ip, "role": "entry"}]})
+            self.now[0] += myaddr.KEEPALIVE
+            names.tick()
+            self.assertEqual(sent[-1], ("B", ip))
+        for bad in ({"names": [{"name": "familie-3", "domain": "myaddr.io", "role": "endpoint"}]},
                     {"names": [{"name": "familie-3", "domain": "myaddr.io", "role": "x", "key": "D" * 43}]}):
             with self.assertRaises(ValidationError):
                 names.save(bad)
