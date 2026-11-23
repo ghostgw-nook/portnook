@@ -45,8 +45,9 @@ def wg_public_ip(device, url=None, timeout=10, request=httpc.request):
         return ""
 
 
-def backend_tls(ip, port, sni=None, timeout=5.0):
-    """TCP connect + TLS handshake (certificate not validated).
+def backend_tls(ip, port, sni=None, timeout=5.0, proxy_protocol=False):
+    """TCP connect + TLS handshake (certificate not validated). ``proxy_protocol`` (0.30.0): send a PROXY v2
+    header with the agent's own address first, as the relayed connections do.
 
     Returns ``{"ok", "tcp", "tls", "latency_ms", "error", "checked"}``;
     ``ok`` means the TLS handshake succeeded.
@@ -59,6 +60,12 @@ def backend_tls(ip, port, sni=None, timeout=5.0):
         result["error"] = "TCP-Verbindung fehlgeschlagen: %s" % (err.strerror or err.__class__.__name__)
         return result
     result["tcp"] = True
+    if proxy_protocol:
+        from .lanproxy import proxy_v2_header
+        try:
+            sock.sendall(proxy_v2_header(sock.getsockname(), sock.getpeername()))
+        except OSError:
+            pass
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE

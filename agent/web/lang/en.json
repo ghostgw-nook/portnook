@@ -485,5 +485,16 @@
  "js.rr_off": "Round robin: VPN off, fixed port only",
  "js.speedtest_starten": "Run test",
  "js.speedtest_einzeln": "Speed test 1 connection",
- "js.speedtest_multi": "Speed test 4 connections"
+ "js.speedtest_multi": "Speed test 4 connections",
+ "pp.titel": "Real visitor IP (PROXY protocol)",
+ "pp.intro": "Without this option your reverse proxy only ever sees portnook's LAN IP. With it, it gets the visitor's real IP, e.g. for logs, fail2ban or geo blocking.",
+ "pp.hilfe": "portnook puts a PROXY protocol v2 header in front of every forwarded connection (VPN tunnel, standby and LAN entry). For this portnook accepts the tunnel ports itself instead of forwarding them in the kernel; that needs a bit more CPU. Your reverse proxy must expect the PROXY protocol on its HTTPS port, otherwise every connection fails.",
+ "pp.einschalten": "Pass the real IP via PROXY protocol",
+ "pp.hinweis": "Switch your reverse proxy first: Zoraxy under Ingress → Advance Settings → PROXY Protocol, nginx with \"listen … proxy_protocol\". Nginx Proxy Manager cannot do it yet.",
+ "pp.anleitung": "Guide in the wiki",
+ "js.pp_an": "On: header is sent",
+ "js.pp_tunnel": "Tunnel ports",
+ "js.pp_bestatigen": "Turn on the PROXY protocol?\n\nYour reverse proxy must expect it on its HTTPS port (Zoraxy: PROXY Protocol on; nginx: listen … proxy_protocol). Otherwise nothing is reachable afterwards. Nginx Proxy Manager cannot do it yet.",
+ "js.pp_eingeschaltet": "PROXY protocol turned on.",
+ "js.pp_ausgeschaltet": "PROXY protocol turned off."
 }

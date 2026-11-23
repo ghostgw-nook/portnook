@@ -249,6 +249,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self._send(200, self.agent.failover.set_settings(body))
             if path == "/api/lan-entry":
                 return self._send(200, self.agent.set_lan_entry(body))
+            if path == "/api/proxy-protocol":
+                return self._send(200, self.agent.set_proxy_protocol(body))
             if path == "/api/setup/backend":
                 return self._send(200, self.agent.setup_backend(body, self.client_ip))
             if path == "/api/myaddr/all":

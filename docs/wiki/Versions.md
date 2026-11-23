@@ -9,7 +9,7 @@ versions.
 
 | Edition | portnook | Notes |
 |---|---|---|
-| **rc1** | 0.27.x | First release candidate before going public. All pages written. |
+| **rc1** | 0.27.x–0.30.x | First release candidate before going public. All pages written; 0.30 adds the PROXY protocol. |
 
 ## Older versions
 
@@ -31,8 +31,9 @@ Example: [v0.27.0](https://github.com/ghostgw-nook/portnook/tree/v0.27.0/docs/wi
 | [So funktioniert es](So-funktioniert-es) (Deutsch) | 0.27 | 0.27.1 |
 | [Installation](Installation) | 0.27 | 0.27 (rc1), Unraid template in 0.27.2 |
 | [Port 443 or a dedicated port](Reverse-proxy-port) | 0.27 | 0.27 (rc1) |
-| [Nginx Proxy Manager](Nginx-Proxy-Manager) | 0.27 | 0.27 (rc1) |
-| [Zoraxy](Zoraxy) | 0.27 | 0.27 (rc1) |
+| [Nginx Proxy Manager](Nginx-Proxy-Manager) | 0.30 | 0.27 (rc1), PROXY protocol in 0.30 |
+| [Zoraxy](Zoraxy) | 0.30 | 0.27 (rc1), PROXY protocol in 0.30 |
+| [Real visitor IP (PROXY protocol)](PROXY-protocol) | 0.30 | 0.30 |
 | [Names and certificate](Names-and-certificate) | 0.27 | 0.27 (rc1) |
 | [VPN profiles and failover](VPN-profiles-and-failover) | 0.27 | 0.27 (rc1) |
 | [Redirect host](Redirect-host) | 0.27 | 0.27 (rc1) |

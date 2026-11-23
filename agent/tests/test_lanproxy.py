@@ -3,7 +3,9 @@ import threading
 import time
 import unittest
 
-from app.lanproxy import LanProxy
+import struct
+
+from app.lanproxy import PP2_SIGNATURE, LanProxy, TunnelProxy, proxy_v2_header
 
 
 def free_port():
@@ -108,6 +110,62 @@ class LanProxyTest(unittest.TestCase):
         except OSError:
             pass  # closed before or with the request unread (reset, not connected): as good as an empty answer
         self.assertLess(time.time() - start, 5)
+
+
+def parse_v2(data):
+    """(src, dst, rest) of a PROXY v2 PROXY/TCP4 header at the start of ``data``."""
+    assert data.startswith(PP2_SIGNATURE), data[:16]
+    ver_cmd, fam, length = data[12], data[13], struct.unpack("!H", data[14:16])[0]
+    assert (ver_cmd, fam, length) == (0x21, 0x11, 12)
+    body = data[16:28]
+    src = (".".join(map(str, body[0:4])), struct.unpack("!H", body[8:10])[0])
+    dst = (".".join(map(str, body[4:8])), struct.unpack("!H", body[10:12])[0])
+    return src, dst, data[28:]
+
+
+class ProxyHeaderTest(unittest.TestCase):
+    def test_v2_tcp4(self):
+        h = proxy_v2_header(("203.0.113.9", 51000), ("10.2.0.2", 41763))
+        self.assertEqual(len(h), 28)
+        self.assertEqual(parse_v2(h + b"x"), (("203.0.113.9", 51000), ("10.2.0.2", 41763), b"x"))
+
+    def test_not_ipv4_is_local(self):
+        self.assertEqual(proxy_v2_header(("::1", 1, 0, 0), ("::1", 2, 0, 0)), PP2_SIGNATURE + b"\x20\x00\x00\x00")
+
+
+class ProxyProtocolRelayTest(unittest.TestCase):
+    def test_lan_entry_sends_header_when_on(self):
+        proxy = LanProxy(device=None)
+        self.addCleanup(proxy.stop)
+        backend = EchoServer(b"")
+        self.addCleanup(backend.close)
+        port = free_port()
+        proxy.update(["127.0.0.1"], [port], ("127.0.0.1", backend.port), proxy_protocol=True)
+        src, dst, rest = parse_v2(roundtrip(port, b"hello"))
+        self.assertEqual((src[0], dst), ("127.0.0.1", ("127.0.0.1", port)))
+        self.assertNotEqual(src[1], port)
+        self.assertEqual(rest, b"hello")
+        proxy.update(["127.0.0.1"], [port], ("127.0.0.1", backend.port), proxy_protocol=False)
+        self.assertEqual(roundtrip(port, b"plain"), b"plain")
+
+    def test_tunnel_proxy_always_sends_header(self):
+        proxy = TunnelProxy(upstream_device=None, bind_any="127.0.0.1", bind_devices=False)
+        self.addCleanup(proxy.stop)
+        backend = EchoServer(b"")
+        self.addCleanup(backend.close)
+        p0, p1 = free_port(), free_port()
+        self.assertEqual(proxy.update([("wg0", [p0]), ("wg1", [p1])], ("127.0.0.1", backend.port)),
+                         [("wg0", p0), ("wg1", p1)])
+        for port in (p0, p1):
+            src, dst, rest = parse_v2(roundtrip(port, b"x" * 70000))
+            self.assertEqual(dst, ("127.0.0.1", port))
+            self.assertEqual(rest, b"x" * 70000)
+        proxy.update([("wg0", [p0])], ("127.0.0.1", backend.port))  # standby gone: its port closed
+        self.assertEqual(proxy.listening(), [("wg0", p0)])
+        with self.assertRaises(OSError):
+            socket.create_connection(("127.0.0.1", p1), timeout=2).close()
+        proxy.stop()
+        self.assertEqual(proxy.listening(), [])
 
 
 if __name__ == "__main__":

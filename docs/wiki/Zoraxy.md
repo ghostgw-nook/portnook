@@ -1,6 +1,6 @@
 # Zoraxy
 
-> **Applies to:** portnook 0.27 (rc1) · [Versions](Versions)
+> **Applies to:** portnook 0.30 (rc1) · [Versions](Versions)
 
 portnook writes its certificate as files into Zoraxy's certificate folder. Zoraxy picks a certificate by file
 name and reads the files on each connection, so renewals need no restart (only the first time, see below).
@@ -51,6 +51,11 @@ serve proxy request" on). So with Zoraxy use approach **A**:
 
 If you need strict separation, run the public hosts on a second reverse proxy (e.g. NPM with a
 [dedicated port](Nginx-Proxy-Manager#b-dedicated-port-8443)) and point portnook's backend to it.
+
+## Real visitor IP
+
+By default Zoraxy sees portnook's LAN IP for every visitor. To get the real IP, switch on **PROXY Protocol**
+(Ingress → Advance Settings) and the matching option in portnook: see [Real visitor IP (PROXY protocol)](PROXY-protocol).
 
 ## Troubleshooting
 

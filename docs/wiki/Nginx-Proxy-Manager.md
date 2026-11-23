@@ -1,6 +1,6 @@
 # Nginx Proxy Manager
 
-> **Applies to:** portnook 0.27 (rc1) · [Versions](Versions)
+> **Applies to:** portnook 0.30 (rc1) · [Versions](Versions)
 
 portnook uploads its certificate to NPM as a **Custom** certificate and replaces that same certificate on every
 renewal. Your proxy hosts keep pointing to it.
@@ -75,6 +75,11 @@ curl -sk --resolve app.<name>.myaddr.tools:8443:<NPM IP> https://app.<name>.myad
 
 > The `listen` lines are standard nginx and not tested live with every NPM version. If NPM refuses to save,
 > check its log for a duplicate `listen` and use approach A.
+
+## Real visitor IP
+
+By default NPM sees portnook's LAN IP for every visitor. To get the real IP, use the dedicated port of
+approach B with `proxy_protocol`: see [Real visitor IP (PROXY protocol)](PROXY-protocol).
 
 ## Troubleshooting
 

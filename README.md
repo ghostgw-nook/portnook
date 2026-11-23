@@ -67,6 +67,9 @@ und das Log. Dazu Knöpfe für Proton neu verbinden, NAT-PMP erneuern, Backend t
 - **Übergabe:** Download (`fullchain.pem`, `privkey.pem`, ZIP), Abruf per Token und Skript
   ([`docs/pull-cert.sh`](docs/pull-cert.sh)), automatischer Upload an **Nginx Proxy Manager** (gleiches
   Zertifikat wird bei der Erneuerung ersetzt) und Ablage im Zertifikatsordner von **Zoraxy**.
+- **Echte Besucher-IP (optional):** Auf Wunsch übergibt portnook die IP des Besuchers per PROXY-Protokoll an den
+  Reverse Proxy (Zoraxy mit einem Schalter, Nginx Proxy Manager und nginx über einen eigenen Port). Sonst sieht
+  der Reverse Proxy nur die LAN-IP von portnook. Anleitung: [Wiki: Real visitor IP](https://github.com/ghostgw-nook/portnook/wiki/PROXY-protocol).
 
 | myaddr | Zertifikat |
 |---|---|

@@ -372,6 +372,15 @@ h3 { font-size: 14px; margin: 16px 0 4px; }
     <div id="le-msg"></div>
   </div>
   <div class="card">
+    <h2>{{pp.titel}}</h2>
+    <p class="muted">{{pp.intro}}</p>
+    <details class="help"><summary>{{ui.hilfe}}</summary><p>{{pp.hilfe}}</p></details>
+    <label class="inline"><input type="checkbox" id="pp-on"> {{pp.einschalten}}</label>
+    <div class="hint">{{pp.hinweis}} <a href="https://github.com/ghostgw-nook/portnook/wiki/PROXY-protocol" target="_blank" rel="noopener noreferrer">{{pp.anleitung}}</a></div>
+    <dl id="s-pp"></dl>
+    <div id="pp-msg"></div>
+  </div>
+  <div class="card">
     <h2>{{vpn.ereignisse}}</h2>
     <div class="small" id="vp-events"></div>
   </div>
@@ -1211,6 +1220,11 @@ async function refresh() {
     (le.urls || []).length ? [tx("js.im_lan"), le.urls.join(", ")] : null,
     (le.skipped || []).length ? [tx("js.ubersprungen"), le.skipped.join(", ") + tx("js.port_des_webui")] : null,
     Object.keys(le.errors || {}).length ? [tx("js.fehler"), Object.entries(le.errors).map(([k, v]) => k + ": " + v).join(", ")] : null]);
+  const pp = st.proxy_protocol || {};
+  $("pp-on").checked = !!pp.enabled;
+  $("s-pp").innerHTML = dl([[tx("vpn.status"), pp.enabled ? tx("js.pp_an") : tx("js.ausgeschaltet")],
+    pp.enabled ? [tx("js.pp_tunnel"), (pp.tunnel || []).join(", ") || tx("js.wartet_auf_vpn_port")] : null,
+    Object.keys(pp.errors || {}).length ? [tx("js.fehler"), Object.entries(pp.errors).map(([k, v]) => k + ": " + v).join(", ")] : null]);
   dot("d-ddns", lk("ddns")); $("s-ddns").innerHTML = ddnsBlocks(st);
   const worst = [L.cert, L.delivery].includes("error") ? "err" : ([L.cert, L.delivery].includes("warn") ? "warn" : lk("cert"));
   const c = st.cert;
@@ -1770,6 +1784,16 @@ $("le-on").addEventListener("change", async (ev) => {
     await api("POST", "/api/lan-entry", { enabled: on });
     msg("le-msg", "ok", on ? tx("js.lan_eingang_eingeschaltet") : tx("js.lan_eingang_ausgeschaltet"));
   } catch (e) { msg("le-msg", "err", esc(e.message)); }
+  ev.target.disabled = false; refresh();
+});
+$("pp-on").addEventListener("change", async (ev) => {
+  const on = ev.target.checked;
+  if (on && !confirm(tx("js.pp_bestatigen"))) { ev.target.checked = false; return; }
+  ev.target.disabled = true;
+  try {
+    await api("POST", "/api/proxy-protocol", { enabled: on });
+    msg("pp-msg", "ok", on ? tx("js.pp_eingeschaltet") : tx("js.pp_ausgeschaltet"));
+  } catch (e) { msg("pp-msg", "err", esc(e.message)); }
   ev.target.disabled = false; refresh();
 });
 $("fo-save").addEventListener("click", (ev) => busy(ev.target, async () => {

@@ -12,7 +12,8 @@ from app import agent as agentmod
 from app.agent import Agent, SetupError
 from app.httpc import EgressBlocked
 from app.store import Store
-from tests.fakes import PRIV, PROTON_SAMPLE, FakeLanProxy, FakeRun, base_responses
+from app.validate import ValidationError
+from tests.fakes import PRIV, PROTON_SAMPLE, FakeLanProxy, FakeRun, FakeTunnelProxy, base_responses
 
 IPT = "iptables -w 5 -t "
 
@@ -112,6 +113,18 @@ class NetSequenceTest(unittest.TestCase):
         # one atomic restore first, then only jump checks (no flush of a live chain)
         self.assertEqual(self.fake.joined(), ["iptables-restore -w 5 --noflush"] + jumps)
 
+    def test_firewall_proxy_in_accepts_instead_of_dnat(self):
+        # 0.30.0: PROXY protocol -> the agent listens on the tunnel ports itself
+        text = self.net.firewall_rules("192.168.1.10", 443, True, [("wg0", [51234]), ("wg1", [40000])], proxy_in=True)
+        self.assertNotIn("DNAT --to-destination", text)
+        accept = "-A PF_IN -i wg0 -p tcp --dport 51234 -m conntrack --ctstate NEW -j ACCEPT"
+        self.assertIn(accept, text)
+        self.assertIn("-A PF_IN -i wg1 -p tcp --dport 40000 -m conntrack --ctstate NEW -j ACCEPT", text)
+        self.assertLess(text.index(accept), text.index("-A PF_IN -i wg+ -j DROP"))
+        plain = self.net.firewall_rules("192.168.1.10", 443, True, [("wg0", [51234])])
+        self.assertIn("-A PF_PRE -i wg0 -p tcp --dport 51234 -j DNAT --to-destination 192.168.1.10:443", plain)
+        self.assertNotIn("--ctstate NEW -j ACCEPT", plain)
+
     def test_firewall_plain_is_idempotent(self):
         self.fake.on(["iptables", "-w", "5", "-t"], 0, "")  # jumps exist already
         self.fake.responses = [r for r in self.fake.responses if r[0][-1] != "-C"]
@@ -196,7 +209,9 @@ class AgentFlowTest(unittest.TestCase):
         self.store = Store(os.path.join(self.tmp, "agent.json"))
         self.net = netmod.Net(wg_dir=os.path.join(self.tmp, "wireguard"))
         self.lanproxy = FakeLanProxy()
-        self.agent = Agent(self.store, self.net, version="0.2.0", sleep=lambda s: None, lanproxy=self.lanproxy)
+        self.tunnelproxy = FakeTunnelProxy()
+        self.agent = Agent(self.store, self.net, version="0.2.0", sleep=lambda s: None, lanproxy=self.lanproxy,
+                           tunnelproxy=self.tunnelproxy)
 
     def tearDown(self):
         for p in self.patches:
@@ -252,6 +267,33 @@ class AgentFlowTest(unittest.TestCase):
         self.agent.set_forward_port(51234)  # a stray NAT-PMP port never opens anything in fixed mode
         self.assertNotIn("51234", self.fake.restores()[-1])
         self.assertFalse(any(c.startswith("natpmpc") for c in self.fake.joined()))
+
+    def test_proxy_protocol_toggle(self):
+        self.wg0_ready()
+        self.store.update("backend", {"addr": "192.168.1.10:443"})
+        self.agent.setup_proton({"enabled": True, "conf": PROTON_SAMPLE, "lan_nets": ["192.168.1.0/24"]})
+        self.agent.set_forward_port(51234)
+        self.assertIn("--dport 51234 -j DNAT", self.fake.restores()[-1])
+        self.assertEqual(self.tunnelproxy.listening(), [])
+        self.assertFalse(self.lanproxy.proxy_protocol)
+        self.assertEqual(self.agent.status()["proxy_protocol"], {"enabled": False, "tunnel": [], "errors": {}})
+        with self.assertRaises(ValidationError):
+            self.agent.set_proxy_protocol({"enabled": "yes"})
+        res = self.agent.set_proxy_protocol({"enabled": True})
+        self.assertTrue(res["ok"])
+        text = self.fake.restores()[-1]
+        self.assertNotIn("DNAT --to-destination", text)
+        self.assertIn("-A PF_IN -i wg0 -p tcp --dport 51234 -m conntrack --ctstate NEW -j ACCEPT", text)
+        self.assertEqual(self.tunnelproxy.listening(), [("wg0", 51234)])
+        self.assertEqual(self.tunnelproxy.backend, ("192.168.1.10", 443))
+        self.assertTrue(self.lanproxy.proxy_protocol)  # the LAN entry sends the header too
+        self.assertEqual(res["proxy_protocol"]["tunnel"], ["wg0:51234"])
+        self.agent.set_forward_port(40000)  # follows the port
+        self.assertEqual(self.tunnelproxy.listening(), [("wg0", 40000)])
+        self.agent.set_proxy_protocol({"enabled": False})
+        self.assertIn("--dport 40000 -j DNAT", self.fake.restores()[-1])
+        self.assertEqual(self.tunnelproxy.listening(), [])
+        self.assertFalse(self.lanproxy.proxy_protocol)
 
     def test_lan_entry_follows_port_and_toggle(self):
         self.wg0_ready()

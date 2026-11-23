@@ -270,7 +270,8 @@ class Net:
         return self._run(["iptables", "-w", "5", "-t", table] + list(args), check=check)
 
     @staticmethod
-    def firewall_rules(backend_ip=None, backend_port=None, proton=False, proton_port=0, out_allow=None, mss=None):
+    def firewall_rules(backend_ip=None, backend_port=None, proton=False, proton_port=0, out_allow=None, mss=None,
+                       proxy_in=False):
         """iptables-restore input for all PF_* chains (applied in one transaction).
 
         * with a VPN: DNAT wg0 tcp/<port> to the backend for each port (NAT-PMP port or fixed ports);
@@ -283,16 +284,23 @@ class Net:
           eth0 only to private addresses, the DNS servers and the WireGuard endpoints (``out_allow`` =
           ``{"dns": [ip], "endpoints": [(ip, port)]}``); everything else to the internet is rejected, so
           nothing leaves through the home line even if wg0 is gone
+        * ``proxy_in`` (0.30.0, PROXY protocol): no DNAT for the tunnel ports, the agent itself listens on them
+          (``app.lanproxy.TunnelProxy``); PF_IN accepts new TCP connections to exactly those ports
         * the LAN entry is no firewall rule since 0.18.1 but a TCP proxy bound to eth0 (``app.lanproxy``):
           DNAT on eth0 never fired behind an ipvlan network on a bridge whose host tracks the SYN first
         """
         rules = {"nat": [], "mangle": [], "filter": []}
+        local_in = []
         if backend_ip:
             dest = "%s:%d" % (backend_ip, int(backend_port))
             for iface, ports in (_tunnel_ports(proton_port) if proton else []):
                 for p in ports:
-                    rules["nat"].append("-A PF_PRE -i %s -p tcp --dport %d -j DNAT --to-destination %s"
-                                        % (iface, p, dest))
+                    if proxy_in:
+                        local_in.append("-A PF_IN -i %s -p tcp --dport %d -m conntrack --ctstate NEW -j ACCEPT"
+                                        % (iface, p))
+                    else:
+                        rules["nat"].append("-A PF_PRE -i %s -p tcp --dport %d -j DNAT --to-destination %s"
+                                            % (iface, p, dest))
         rules["nat"].append("-A PF_POST -o %s -m conntrack --ctstate DNAT -j MASQUERADE" % LAN_IF)
         target = "--set-mss %d" % _mss(mss) if mss else "--clamp-mss-to-pmtu"
         for flag in ("-i", "-o"):
@@ -304,6 +312,7 @@ class Net:
                                        % (t, TUNNEL_CONNMARK[t]))
             rules["mangle"].append("-A PF_MARK -i %s -m connmark ! --mark 0x0 -j CONNMARK --restore-mark" % LAN_IF)
         rules["filter"].append("-A PF_IN -i wg+ -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT")
+        rules["filter"] += local_in
         rules["filter"].append("-A PF_IN -i wg+ -j DROP")
         if backend_ip:
             rules["filter"].append("-A PF_FWD -i wg+ -o %s -p tcp -d %s --dport %d -m conntrack --ctstate DNAT "
@@ -336,14 +345,14 @@ class Net:
         return "\n".join(out) + "\n"
 
     def firewall_apply(self, backend_ip=None, backend_port=None, proton=False, proton_port=0, out_allow=None,
-                       mss=None):
+                       mss=None, proxy_in=False):
         """Replace the content of all PF_* chains atomically, then make sure the jumps exist.
 
         ``iptables-restore --noflush`` declares (creates or flushes) only our own
         chains and refills them in one commit per table, so there is no moment
         without the DROP rules. Built-in chains are not flushed.
         """
-        text = self.firewall_rules(backend_ip, backend_port, proton, proton_port, out_allow, mss)
+        text = self.firewall_rules(backend_ip, backend_port, proton, proton_port, out_allow, mss, proxy_in)
         self._run(["iptables-restore", "-w", "5", "--noflush"], input=text)
         for table, parent, chain in CHAINS:
             if self._ipt(table, "-C", parent, "-j", chain, check=False).returncode != 0:

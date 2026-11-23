@@ -157,9 +157,12 @@ class FakeLanProxy:
         self.ips, self.ports, self.backend = [], [], None
         self.errors = {}
 
-    def update(self, ips, ports, backend):
+        self.proxy_protocol = False
+
+    def update(self, ips, ports, backend, proxy_protocol=False):
         self.ips, self.ports = list(ips or []), list(ports or [])
         self.backend = tuple(backend) if backend else None
+        self.proxy_protocol = proxy_protocol
         return self.listening()
 
     def stop(self):
@@ -167,3 +170,22 @@ class FakeLanProxy:
 
     def listening(self):
         return sorted((ip, p) for ip in self.ips for p in self.ports) if self.backend else []
+
+
+class FakeTunnelProxy:
+    """Records what the tunnel entry proxy (app.lanproxy.TunnelProxy, PROXY protocol) would listen on."""
+
+    def __init__(self):
+        self.tunnels, self.backend = [], None
+        self.errors = {}
+
+    def update(self, tunnels, backend):
+        self.tunnels = [(i, list(p)) for i, p in tunnels or []]
+        self.backend = tuple(backend) if backend else None
+        return self.listening()
+
+    def stop(self):
+        self.update([], None)
+
+    def listening(self):
+        return sorted((i, p) for i, ports in self.tunnels for p in ports) if self.backend else []

@@ -68,6 +68,9 @@ below. Buttons to reconnect the VPN, renew NAT-PMP, test the backend and update 
 - **Delivery:** download (`fullchain.pem`, `privkey.pem`, ZIP), pull by token and script
   ([`docs/pull-cert.sh`](docs/pull-cert.sh)), automatic upload to **Nginx Proxy Manager** (the same certificate is
   replaced on renewal) and a copy into the certificate folder of **Zoraxy**.
+- **Real visitor IP (optional):** if you like, portnook passes the visitor's IP to your reverse proxy via the PROXY
+  protocol (Zoraxy with one switch, Nginx Proxy Manager and nginx through a dedicated port). Otherwise the reverse
+  proxy only sees portnook's LAN IP. Guide: [Wiki: Real visitor IP](https://github.com/ghostgw-nook/portnook/wiki/PROXY-protocol).
 
 | myaddr | Certificate |
 |---|---|

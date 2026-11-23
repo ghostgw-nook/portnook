@@ -485,5 +485,16 @@
  "js.rr_off": "Round Robin: VPN aus, nur fester Port",
  "js.speedtest_starten": "Messen",
  "js.speedtest_einzeln": "Speedtest 1 Verbindung",
- "js.speedtest_multi": "Speedtest 4 Verbindungen"
+ "js.speedtest_multi": "Speedtest 4 Verbindungen",
+ "pp.titel": "Echte Besucher-IP (PROXY-Protokoll)",
+ "pp.intro": "Ohne diese Option sieht dein Reverse Proxy bei jeder Verbindung nur die LAN-IP von portnook. Mit ihr bekommt er die echte IP des Besuchers, z. B. für Logs, fail2ban oder Geo-Sperren.",
+ "pp.hilfe": "portnook stellt jeder weitergeleiteten Verbindung (VPN-Tunnel, Reserve und LAN-Eingang) eine Kopfzeile im PROXY-Protokoll v2 voran. Dafür nimmt portnook die Tunnel-Ports selbst an statt sie im Kernel weiterzuleiten; das braucht etwas mehr CPU. Der Reverse Proxy muss das PROXY-Protokoll auf seinem HTTPS-Port erwarten, sonst schlägt jede Verbindung fehl.",
+ "pp.einschalten": "Echte IP per PROXY-Protokoll übergeben",
+ "pp.hinweis": "Zuerst den Reverse Proxy umstellen: Zoraxy unter Ingress → Advance Settings → PROXY Protocol, nginx mit «listen … proxy_protocol». Nginx Proxy Manager kann es noch nicht.",
+ "pp.anleitung": "Anleitung im Wiki",
+ "js.pp_an": "An: Kopfzeile wird mitgeschickt",
+ "js.pp_tunnel": "Tunnel-Ports",
+ "js.pp_bestatigen": "PROXY-Protokoll einschalten?\n\nDein Reverse Proxy muss es auf seinem HTTPS-Port erwarten (Zoraxy: PROXY Protocol an; nginx: listen … proxy_protocol). Sonst ist danach nichts mehr erreichbar. Nginx Proxy Manager kann es noch nicht.",
+ "js.pp_eingeschaltet": "PROXY-Protokoll eingeschaltet.",
+ "js.pp_ausgeschaltet": "PROXY-Protokoll ausgeschaltet."
 }

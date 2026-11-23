@@ -55,7 +55,7 @@ class PasswordError(ValidationError):
 
 class Agent:
     def __init__(self, store, net=None, version="0.0.0", clock=time.time, sleep=time.sleep, data_dir=None,
-                 lanproxy=None):
+                 lanproxy=None, tunnelproxy=None):
         self.store = store
         self.data_dir = data_dir or os.path.dirname(os.path.abspath(store.path))
         self.net = net or netmod.Net()
@@ -63,6 +63,10 @@ class Agent:
             from .lanproxy import LanProxy
             lanproxy = LanProxy()
         self.lanproxy = lanproxy  # LAN entry (0.18.1): TCP proxy on the own eth0 address(es)
+        if tunnelproxy is None:
+            from .lanproxy import TunnelProxy
+            tunnelproxy = TunnelProxy()
+        self.tunnelproxy = tunnelproxy  # 0.30.0: tunnel ports in user space while the PROXY protocol is on
         self.version = version
         self.clock = clock
         self.sleep = sleep
@@ -266,9 +270,18 @@ class Agent:
         tunnels = [(self.active_if, self.forward_ports(st))]
         if self.standby.state.get("iface"):
             tunnels.append((self.standby.state["iface"], self.standby.ports(st)))
-        self.net.firewall_apply(bip, bport, self._proton_on(st), tunnels, self.out_allow(st), mss=mss)
+        pp = self.proxy_protocol_on(st)
+        tunnel_in = pp and bool(bip) and self._proton_on(st)
+        self.net.firewall_apply(bip, bport, self._proton_on(st), tunnels, self.out_allow(st), mss=mss,
+                                proxy_in=tunnel_in)
+        # 0.30.0: with the PROXY protocol the agent itself takes the tunnel ports (the client address is needed)
+        if tunnel_in:
+            self.tunnelproxy.update([(i, [p for p in ports if p]) for i, ports in tunnels if i], (str(bip), int(bport)))
+        else:
+            self.tunnelproxy.stop()
         # 0.18.1: a proxy instead of DNAT on eth0 (an ipvlan/bridge host can skip the container's nat table)
-        self.lanproxy.update(lan["ips"], lan["ports"], (str(bip), int(bport)) if lan["active"] else None)
+        self.lanproxy.update(lan["ips"], lan["ports"], (str(bip), int(bport)) if lan["active"] else None,
+                             proxy_protocol=pp)
         if lan["active"] and (lan["ips"], lan["ports"]) != self.rt.get("lan_entry"):
             log("lan entry: %s port %s", ", ".join(lan["ips"]), ", ".join(map(str, lan["ports"])))
         self.rt["lan_entry"] = (lan["ips"], lan["ports"]) if lan["active"] else None
@@ -300,6 +313,28 @@ class Agent:
         if self.rt["net"].get("applied"):
             self.apply_network()
         return {"ok": True, "lan_entry": self.lan_entry_status()}
+
+    @staticmethod
+    def proxy_protocol_on(st):
+        return (st.get("backend") or {}).get("proxy_protocol") is True
+
+    def set_proxy_protocol(self, body):
+        """0.30.0: hand the client's real IP to the reverse proxy (PROXY protocol v2); the reverse proxy must
+        expect it (nginx ``listen ... proxy_protocol``, Zoraxy "PROXY Protocol"), else every connection fails."""
+        enabled = (body or {}).get("enabled")
+        if not isinstance(enabled, bool):
+            raise ValidationError("Feld 'enabled' fehlt (true oder false).")
+        self.store.update("backend", {"proxy_protocol": enabled})
+        log("proxy protocol %s", "on" if enabled else "off")
+        if self.rt["net"].get("applied"):
+            self.apply_network()
+        return {"ok": True, "proxy_protocol": self.proxy_protocol_status()}
+
+    def proxy_protocol_status(self, st=None):
+        st = st or self.store.get()
+        on = self.proxy_protocol_on(st)
+        return {"enabled": on, "tunnel": ["%s:%d" % x for x in self.tunnelproxy.listening()] if on else [],
+                "errors": dict(self.tunnelproxy.errors) if on else {}}
 
     def lan_entry_status(self, st=None):
         lan = self.lan_entry(st)
@@ -795,7 +830,7 @@ class Agent:
             return {"ok": False, "tcp": False, "tls": False, "latency_ms": 0, "error": "Kein Backend gesetzt."}
         ip, port = validate.backend(st["backend"]["addr"])
         sni = self.fqdn()
-        res = probe.backend_tls(ip, port, sni=sni or None)
+        res = probe.backend_tls(ip, port, sni=sni or None, proxy_protocol=self.proxy_protocol_on(st))
         res["sni"] = sni
         previous = self.rt.get("backend") or {}
         self.rt["backend"] = res
@@ -900,6 +935,7 @@ class Agent:
                "backend": backend, "myaddr": myaddr, "ddns": self.ddns.status(), "names": self.names.status(), "cert": self.certs.status(),
                "delivery": self.certs.delivery_status(), "redirect": self.redirect.status(), "net": dict(self.rt["net"]),
                "natpmpc": probe.natpmpc_available(), "push": self.notify.status(),
-               "egress": {"tunnel_up": self.egress.tunnel_up()}, "lan_entry": self.lan_entry_status(st)}
+               "egress": {"tunnel_up": self.egress.tunnel_up()}, "lan_entry": self.lan_entry_status(st),
+               "proxy_protocol": self.proxy_protocol_status(st)}
         out["light"] = lights.evaluate(out)
         return out
