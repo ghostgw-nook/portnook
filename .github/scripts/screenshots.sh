@@ -64,8 +64,19 @@ done
 step "LAN $SUBNET: pebble, challtestsrv, fake myaddr/NPM, backend, agent"
 docker network create --subnet "$SUBNET" "$NET" >/dev/null
 docker run -d --name pfs-chall --network "$NET" --ip "$CHALL_IP" "$CHALL_IMAGE" -defaultIPv6 "" -defaultIPv4 "$CHALL_IP" >/dev/null
+# pebble 2.10 may hand out its 6-day "shortlived" profile; the status page shows < 14 days as an error, so the
+# screenshots get a config with the 90-day profile only (same file as the image's, minus "shortlived")
+cat > "$WORK/pebble.json" <<'JSON'
+{"pebble": {"listenAddress": "0.0.0.0:14000", "managementListenAddress": "0.0.0.0:15000",
+  "certificate": "test/certs/localhost/cert.pem", "privateKey": "test/certs/localhost/key.pem",
+  "httpPort": 5002, "tlsPort": 5001, "ocspResponderURL": "", "externalAccountBindingRequired": false,
+  "domainBlocklist": ["blocked-domain.example"], "retryAfter": {"authz": 3, "order": 5}, "keyAlgorithm": "ecdsa",
+  "profiles": {"default": {"description": "90 days", "validityPeriod": 7776000}}}}
+JSON
+chmod 644 "$WORK/pebble.json"
 docker run -d --name pfs-pebble --network "$NET" --ip "$PEBBLE_IP" --network-alias pebble -e PEBBLE_VA_NOSLEEP=1 \
-  -e PEBBLE_WFE_NONCEREJECT=0 "$PEBBLE_IMAGE" -config test/config/pebble-config.json -dnsserver "$CHALL_IP:8053" >/dev/null
+  -e PEBBLE_WFE_NONCEREJECT=0 -v "$WORK/pebble.json:/test/config/portnook.json:ro" "$PEBBLE_IMAGE" \
+  -config test/config/portnook.json -dnsserver "$CHALL_IP:8053" >/dev/null
 mkdir -p "$WORK/ca" "$WORK/fake" "$WORK/zoraxy"
 docker cp pfs-pebble:/test/certs/pebble.minica.pem "$WORK/ca/minica.pem" >/dev/null
 cp "$ROOT/.github/scripts/e2e/fake_lan.py" "$WORK/fake/"
