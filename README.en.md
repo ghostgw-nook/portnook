@@ -52,13 +52,13 @@ below. Buttons to reconnect the VPN, renew NAT-PMP, test the backend and update 
 - **No tunnel, no internet (since 0.10.1):** Without a tunnel portnook contacts no service on the internet –
   neither myaddr.tools (not even with a fallback or manual IP) nor Let's Encrypt, Cloudflare or the redirect
   script. Updates are queued (latest state only) and sent through the tunnel once it is back. Only LAN targets
-  stay reachable (private addresses: NPM, Zoraxy folder, push server in the LAN). Without any VPN portnook
-  therefore works in the LAN only (no DDNS, no certificate).
+  (private addresses: NPM, Zoraxy folder) and the push servers, which are always reached directly (see below),
+  stay reachable. Without any VPN portnook therefore works in the LAN only (no DDNS, no certificate).
 - **Several VPN profiles with failover and standby tunnel:** next to the active VPN a second profile runs all
   the time as standby, with its own port, exit IP and, if you like, its own myaddr name. If the active one fails,
   the standby takes over at once, with no rebuild and no DNS change; the redirect points to it right away. The
   list order is a fixed priority. A name can follow several profiles (the active one, else the standby). If all
-  of them fail, nothing goes over your home line.
+  of them fail, nothing but push messages goes over your home line.
 - **Other VPN providers:** besides Proton (NAT-PMP), any provider's WireGuard file with fixed ports opened in your
   account (e.g. AirVPN); you enter the ports in the UI. The key is entered once and never shown again.
 - **Let's Encrypt via DNS-01:** certificate for `<name>.myaddr.tools` and `*.<name>.myaddr.tools`; test with
@@ -90,9 +90,10 @@ Through **Gotify** (address + app token) and/or **ntfy** (server + topic, option
 button: VPN profile switch, all VPNs down (with a reminder, every 30 minutes by default), recovery, errors in
 DDNS, certificate, redirect, NPM and Zoraxy, and a renewed certificate. The same message at most once per hour.
 
-> **Important:** When all VPNs are down, portnook sends nothing over your home line. You only get the "all VPNs
-> down" alarm from a Gotify or ntfy server **in the LAN** (private address). A server on the internet (e.g.
-> ntfy.sh) only gets the messages once a tunnel is up again.
+> **Good to know:** Push messages always go directly over your home line (`eth0`), past the VPN, to servers in
+> the LAN and on the internet (e.g. ntfy.sh) alike. So you get the "all VPNs down" alarm even when no tunnel is
+> up. The push server sees the IP of your internet connection; your services stay reachable only through the VPN
+> tunnel. A message that fails to send is retried later.
 
 ![Push](docs/images/screenshots/agent-push.png)
 

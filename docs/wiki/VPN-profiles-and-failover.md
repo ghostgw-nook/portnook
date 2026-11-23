@@ -28,6 +28,8 @@ tunnel. With Proton the standby needs a second device slot (one WireGuard file p
   once: no rebuild, port and exit IP are known, DDNS and redirect follow right away.
 - The failed profile is then rebuilt as the new standby.
 - If all profiles fail, traffic stays blocked (kill switch, never over your home line) and the status is red.
+  Push messages are the one exception: they always go directly over the home line, so the "all VPNs down"
+  alarm still reaches you (also on an internet server such as ntfy.sh).
 - After each switch portnook checks every 5 s that DNS and the redirect point to the new target; if not within
   5 minutes, you get a push message.
 

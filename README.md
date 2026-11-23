@@ -50,13 +50,14 @@ und das Log. Dazu Knöpfe für Proton neu verbinden, NAT-PMP erneuern, Backend t
 - **Ohne VPN-Tunnel kein Internet (seit 0.10.1):** Steht kein Tunnel, kontaktiert portnook keinen Dienst im
   Internet – weder myaddr.tools (auch nicht mit Ersatz- oder manueller IP) noch Let's Encrypt, Cloudflare oder
   das Redirect-Skript. Die Updates werden vorgemerkt (nur der neueste Stand) und durch den Tunnel gesendet, sobald
-  er wieder steht. Erreichbar bleiben nur Ziele im LAN (private Adressen: NPM, Zoraxy-Ordner, Push-Server im LAN).
-  Ganz ohne VPN arbeitet portnook deshalb nur im LAN (kein DDNS, kein Zertifikat).
+  er wieder steht. Erreichbar bleiben nur Ziele im LAN (private Adressen: NPM, Zoraxy-Ordner) und die
+  Push-Server, die immer direkt gehen (siehe unten). Ganz ohne VPN arbeitet portnook deshalb nur im LAN (kein DDNS,
+  kein Zertifikat).
 - **Mehrere VPN-Profile mit Failover und Reserve-Tunnel:** neben dem aktiven VPN läuft ein zweites Profil dauernd
   als Reserve, mit eigenem Port, eigener Exit-IP und auf Wunsch eigenem myaddr-Namen. Fällt das aktive aus,
   übernimmt die Reserve sofort, ohne Neuaufbau und ohne DNS-Wechsel; der Redirect zeigt gleich auf sie. Die
   Reihenfolge der Liste ist eine feste Priorität. Ein Name kann auch mehreren Profilen folgen (dem aktiven, sonst
-  der Reserve). Sind alle gestört, geht nichts über die Heimleitung.
+  der Reserve). Sind alle gestört, geht ausser Push-Meldungen nichts über die Heimleitung.
 - **Andere VPN-Anbieter:** neben Proton (NAT-PMP) jede WireGuard-Datei eines Anbieters mit festen, im Kundenkonto
   freigegebenen Ports (z. B. AirVPN); die Ports trägst du im UI ein. Der Schlüssel wird einmal eingegeben und nie wieder angezeigt.
 - **Let's Encrypt per DNS-01:** Zertifikat für `<name>.myaddr.tools` und `*.<name>.myaddr.tools`, zuerst mit
@@ -90,9 +91,10 @@ VPN-Profilwechsel, Ausfall aller VPNs (mit Erinnerung, Standard alle 30 Minuten)
 Wiederherstellung, Fehler bei DDNS, Zertifikat, Redirect, NPM und Zoraxy sowie ein erneuertes Zertifikat.
 Gleiche Meldungen höchstens einmal pro Stunde.
 
-> **Wichtig:** Sind alle VPNs ausgefallen, sendet portnook nichts über die Heimleitung. Den Alarm „Alle VPNs
-> ausgefallen“ bekommst du deshalb nur über einen Gotify- oder ntfy-Server **im LAN** (private Adresse). Ein
-> Server im Internet (z. B. ntfy.sh) erhält die Meldungen erst, wenn wieder ein Tunnel steht.
+> **Gut zu wissen:** Push-Meldungen gehen immer direkt über die Heimleitung (`eth0`), am VPN vorbei, an Server im
+> LAN genauso wie an Server im Internet (z. B. ntfy.sh). Den Alarm „Alle VPNs ausgefallen“ bekommst du deshalb
+> auch dann, wenn kein Tunnel steht. Der Push-Server sieht dabei die IP deines Anschlusses, deine Dienste bleiben
+> trotzdem nur über den VPN-Tunnel erreichbar. Klappt das Senden nicht, wird die Meldung später nochmals versucht.
 
 ![Push](docs/images/screenshots/agent-push.png)
 
