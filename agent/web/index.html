@@ -80,7 +80,7 @@ button.off:disabled { opacity: .3; cursor: default; }
 .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
 .grid .card { margin-bottom: 0; }
 /* status page (0.27.6, owner): VPN and DDNS on top (2), backend, certificate and redirect below (3) */
-.grid.status { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.grid.status { grid-template-columns: repeat(6, minmax(0, 1fr)); align-items: start; }
 .grid.status > .card { grid-column: span 2; }
 .grid.status > .card.wide { grid-column: span 3; }
 @media (max-width: 1100px) { .grid.status { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
@@ -101,6 +101,22 @@ pre.log { background: var(--code); border-radius: 7px; padding: 10px; max-height
 .sec { font-size: 17px; margin: 26px 0 2px; font-weight: 650; }
 .phead h1 { font-size: 21px; margin: 0; font-weight: 650; }
 .lead { color: var(--muted); margin: 0 0 16px; font-size: 14px; }
+/* 0.29.0 (owner): status tiles, a short summary that opens to every detail */
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 10px; align-items: start; }
+.tiles > details.tile[open] { grid-column: 1 / -1; }  /* an open tile takes the whole row, its details need the width */
+details.tile { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; background: var(--bg); min-width: 0; }
+details.tile > summary { list-style: none; cursor: pointer; }
+details.tile > summary::-webkit-details-marker { display: none; }
+details.tile > summary .t-head { display: flex; align-items: center; gap: 8px; font-weight: 650; margin-bottom: 6px; }
+details.tile > summary .t-head > span:last-child { min-width: 0; overflow-wrap: anywhere; }
+details.tile > summary .t-role { font-size: 11.5px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin: -4px 0 6px 19px; }
+details.tile > summary .t-head::after { content: "▸"; margin-left: auto; color: var(--muted); transition: transform .15s; }
+details.tile[open] > summary .t-head::after { transform: rotate(90deg); }
+details.tile[open] > summary { margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+details.tile .t-rate { font-size: 18px; font-weight: 650; font-variant-numeric: tabular-nums; }
+details.tile .t-rate span { color: var(--muted); font-size: 13px; font-weight: 500; margin-right: 4px; }
+details.tile .t-sum { font-size: 13.5px; color: var(--muted); overflow-wrap: anywhere; }
+details.tile .t-sum b { color: var(--fg, inherit); font-weight: 550; }
 details.help { margin: 0 0 10px; font-size: 13px; color: var(--muted); }
 details.help summary { cursor: pointer; color: var(--accent); width: max-content; }
 details.help p { margin: 6px 0; }
@@ -248,9 +264,9 @@ h3 { font-size: 14px; margin: 16px 0 4px; }
   <div class="grid status">
     <div class="card wide"><h2><span class="dot" id="d-proton"></span>{{ui.vpn}}</h2><div id="s-proton"></div></div>
     <div class="card wide"><h2><span class="dot" id="d-ddns"></span>{{status.ddns_myaddr_tools}}</h2><div id="s-ddns"></div></div>
-    <div class="card"><h2><span class="dot" id="d-backend"></span>{{status.backend}}</h2><dl id="s-backend"></dl></div>
-    <div class="card"><h2><span class="dot" id="d-cert"></span>{{ui.zertifikat}}</h2><dl id="s-cert"></dl></div>
-    <div class="card"><h2><span class="dot" id="d-redirect"></span>{{status.redirect}}</h2><dl id="s-redirect"></dl></div>
+    <div class="card"><h2><span class="dot" id="d-backend"></span>{{status.backend}}</h2><div id="s-backend"></div></div>
+    <div class="card"><h2><span class="dot" id="d-cert"></span>{{ui.zertifikat}}</h2><div id="s-cert"></div></div>
+    <div class="card"><h2><span class="dot" id="d-redirect"></span>{{status.redirect}}</h2><div id="s-redirect"></div></div>
   </div>
   <div class="card" style="margin-top:16px">
     <h2>{{status.diagnose}}</h2>
@@ -724,6 +740,23 @@ function bytes(n) {
 function dl(rows) {
   return rows.filter((r) => r).map((r) => "<dt>" + esc(r[0]) + "</dt><dd>" + (r[2] ? r[1] : esc(r[1])) + "</dd>").join("");
 }
+// 0.29.0: a status tile; open tiles stay open over the 5 s refresh (S.openTiles)
+function tile(key, kind, role, title, sumHtml, rows) {
+  const open = (S.openTiles || {})[key] ? " open" : "";
+  return '<details class="tile" data-tile="' + esc(key) + '"' + open + "><summary><div class=\"t-head\"><span class=\"dot " + (kind || "") + '"></span>' +
+    "<span>" + esc(title) + "</span></div>" + (role ? '<div class="t-role">' + esc(role) + "</div>" : "") + sumHtml +
+    "</summary><dl>" + dl(rows) + "</dl></details>";
+}
+function sumLines(pairs) {
+  return pairs.filter((x) => x).map((x) => '<div class="t-sum">' + esc(x[0]) + ": <b>" + esc(x[1]) + "</b></div>").join("");
+}
+document.addEventListener("toggle", (ev) => {
+  const t = ev.target;
+  if (t.matches && t.matches("details.tile")) S.openTiles = Object.assign(S.openTiles || {}, { [t.dataset.tile]: t.open });
+}, true);
+function rateHtml(r) {
+  return '<div class="t-rate">' + (r ? "<span>↓</span>" + esc(bits(r.rx)) + " &nbsp;<span>↑</span>" + esc(bits(r.tx)) : '<span>' + esc(tx("js.wird_gemessen")) + "</span>") + "</div>";
+}
 function dot(id, kind) { $(id).className = "dot " + (kind || ""); }
 function lines(text) { return String(text || "").split(/[\s,]+/).map((s) => s.trim()).filter((s) => s); }
 const DEFAULT_LAN = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]; // all private networks
@@ -889,11 +922,12 @@ function profPos(p, pid) {
 }
 function standbyBlock(sb, nameOf, p, now) {
   if (!sb || !sb.enabled) return "";
-  const head = "<h3>" + esc(tx("js.reserve_gross")) + "</h3>";
-  if (!sb.profile) return head + "<dl>" + dl([[tx("vpn.status"), tx("js.keine_reserve")]]) + "</dl>";
+  if (!sb.profile) return tile("standby", "", tx("js.reserve_gross"), tx("js.keine_reserve"), "", [[tx("vpn.status"), tx("js.keine_reserve")]]);
   const name = nameOf(sb.profile);
   const sbRate = rate("standby", sb.profile, sb.rx, sb.tx, now);
-  return head + "<dl>" + dl([[tx("js.profil"), (sb.profile_name || "-") + profPos(p, sb.profile)],
+  const url = name && sb.port ? "https://" + name + ":" + sb.port : "";
+  return tile("standby", sb.ready ? "ok" : "warn", tx("js.reserve_gross"), sb.profile_name || "-",
+    rateHtml(sbRate) + sumLines([[tx("js.erreichbar"), url || "-"], sb.ready ? null : [tx("vpn.status"), sb.reason || sb.error || tx("js.wird_aufgebaut")]]), [[tx("js.profil"), (sb.profile_name || "-") + profPos(p, sb.profile)],
     [tx("vpn.status"), sb.ready ? tx("js.bereit") : (sb.reason || sb.error || tx("js.wird_aufgebaut"))],
     [tx("vpn.art"), sb.provider === "fixed" ? tx("js.fester_port") : tx("vpn.proton_nat_pmp")],
     [tx("vpn.server"), sb.server || "-"], [tx("js.schnittstelle"), sb.iface || "-"], [tx("js.exit_ip"), sb.exit_ip || tx("js.unbekannt")],
@@ -905,7 +939,7 @@ function standbyBlock(sb, nameOf, p, now) {
     [tx("js.transfer"), tx("js.rx") + bytes(sb.rx) + tx("js.tx") + bytes(sb.tx)],
     speedRow(sbRate), testRow(((p.speedtest || {}).standby), sb.profile, sbRate, "standby"),
     testRow(((p.speedtest || {})["standby-1"]), sb.profile, null, "standby-1"),
-    ["MTU", mtuText(sb)], sb.error && sb.ready ? [tx("js.fehler"), sb.error] : null]) + "</dl>";
+    ["MTU", mtuText(sb)], sb.error && sb.ready ? [tx("js.fehler"), sb.error] : null]);
 }
 function standbyRow(sb) {
   if (!sb || !sb.enabled || !sb.profile) return null;
@@ -1044,7 +1078,12 @@ function ddnsBlocks(st) {
   const profs = (st.proton && st.proton.profiles) || [];
   const pname = (pid) => pid ? String(pid).split(",").map((i) => (profs.find((x) => x.id === i) || {}).name || i).join(", ") : tx("js.keins");
   const role = (r) => r === "entry" ? tx("js.rolle_eingang") : tx("js.rolle_endpunkt");
-  const block = (fqdn, rows) => "<h3>" + esc(fqdn) + "</h3><dl>" + dl(rows) + "</dl>";
+  const block = (fqdn, rows) => {
+    const g = (k) => (rows.find((x) => x && x[0] === tx(k)) || [])[1];
+    const err = g("js.fehler");
+    return tile("dns:" + fqdn, err ? "err" : "ok", g("js.rolle"), fqdn,
+      sumLines([[tx("js.a_eintrag"), g("js.a_eintrag") || "-"], [tx("js.letztes_update"), g("js.letztes_update") || "-"], err ? [tx("js.fehler"), err] : null]), rows);
+  };
   const out = [];
   const main = () => block(m.fqdn, [[tx("js.rolle"), role("endpoint")], [tx("js.profil"), pname(m.profile)],
     ["DDNS", d.enabled ? (d.configured ? tx("js.aktiv") : tx("js.schlussel_fehlt")) : tx("js.aus")],
@@ -1064,7 +1103,7 @@ function ddnsBlocks(st) {
     [tx("js.letztes_update"), n.last_ok ? age(n.last_ok) : tx("js.noch_nicht_gesendet")],
     [tx("js.nachstes_spatestens"), n.next_update ? when(n.next_update) : "-"],
     n.error ? [tx("js.fehler"), n.error] : null])));
-  return out.join("");
+  return '<div class="tiles">' + out.join("") + "</div>";
 }
 function certRows(c) {
   if (c.running) return [[tx("vpn.status"), tx("js.wird_bestellt") + (c.step || "...")]];
@@ -1123,7 +1162,11 @@ async function refresh() {
     // a base name without profile follows the active tunnel (as before 0.27.8)
     const actName = nameOf(act.id) || (!st.myaddr.profile ? st.myaddr.fqdn : "");
     const actRate = rate("active", act.id, p.rx, p.tx, st.time);
-    $("s-proton").innerHTML = "<h3>" + esc(tx("js.tunnel_aktiv")) + "</h3><dl>" + dl([
+    const actUrl = actName && p.port ? "https://" + actName + ":" + p.port : "";
+    const actFail = p.failover && (p.failover.all_down || p.failover.fails_now);
+    $("s-proton").innerHTML = '<div class="tiles">' + tile("active", p.up && !actFail ? "ok" : p.up ? "warn" : "err", tx("js.tunnel_aktiv"), p.profile_name || "-",
+      rateHtml(actRate) + sumLines([[tx("js.erreichbar"), actUrl || "-"], p.up ? null : [tx("vpn.status"), tx("js.tunnel_lauft_nicht")],
+        actFail ? [tx("vpn.failover"), p.failover.all_down ? tx("js.alle_profile_gestort") : p.failover.fails_now + tx("js.fehlprufung_en") + (p.failover.reason || "")] : null]), [
       [tx("js.profil"), (p.profile_name || "-") + profPos(p, act.id)],
       [tx("vpn.status"), p.up ? tx("js.aktiv") : tx("js.tunnel_lauft_nicht")],
       [tx("vpn.art"), p.provider === "fixed" ? tx("js.fester_port") : tx("vpn.proton_nat_pmp")],
@@ -1136,11 +1179,12 @@ async function refresh() {
       [tx("js.transfer"), tx("js.rx") + bytes(p.rx) + tx("js.tx") + bytes(p.tx)],
       speedRow(actRate), testRow((p.speedtest || {}).active, act.id, actRate, "active"),
       testRow((p.speedtest || {})["active-1"], act.id, null, "active-1"),
-      ["MTU", mtuText(p)], p.error ? [tx("js.fehler"), p.error] : null]) + "</dl>" + standbyBlock(p.failover && p.failover.standby_tunnel, nameOf, p, st.time);
+      ["MTU", mtuText(p)], p.error ? [tx("js.fehler"), p.error] : null]) + standbyBlock(p.failover && p.failover.standby_tunnel, nameOf, p, st.time) + "</div>";
   }
   const b = st.backend;
   dot("d-backend", lk("backend"));
-  $("s-backend").innerHTML = dl([[tx("js.adresse"), b.addr || "-"], ["TLS", b.checked ? (b.ok ? "ok" : tx("js.fehler")) : tx("js.noch_nicht_gepruft")],
+  $("s-backend").innerHTML = tile("backend", lk("backend"), "", b.addr || "-", sumLines([["TLS", b.checked ? (b.ok ? "ok" : tx("js.fehler")) : tx("js.noch_nicht_gepruft")],
+      b.latency_ms ? [tx("js.latenz"), b.latency_ms + tx("js.ms")] : null]), [[tx("js.adresse"), b.addr || "-"], ["TLS", b.checked ? (b.ok ? "ok" : tx("js.fehler")) : tx("js.noch_nicht_gepruft")],
     [tx("js.latenz"), b.latency_ms ? b.latency_ms + tx("js.ms") : "-"], [tx("js.gepruft"), b.checked ? age(b.checked) : "-"],
     b.error ? [tx("js.fehler"), b.error] : null, [tx("js.lan_netze"), (b.lan_nets || []).join(", ") || "-"]]);
   if (S.view === "vpn" && !S.beFilled) {
@@ -1160,8 +1204,15 @@ async function refresh() {
     Object.keys(le.errors || {}).length ? [tx("js.fehler"), Object.entries(le.errors).map(([k, v]) => k + ": " + v).join(", ")] : null]);
   dot("d-ddns", lk("ddns")); $("s-ddns").innerHTML = ddnsBlocks(st);
   const worst = [L.cert, L.delivery].includes("error") ? "err" : ([L.cert, L.delivery].includes("warn") ? "warn" : lk("cert"));
-  dot("d-cert", worst); $("s-cert").innerHTML = dl(certRows(st.cert).concat(st.cert.present ? delRows(st.delivery) : []));
-  dot("d-redirect", lk("redirect")); $("s-redirect").innerHTML = dl(redirectRows(st.redirect));
+  const c = st.cert;
+  dot("d-cert", worst); $("s-cert").innerHTML = tile("cert", worst, "", c.running ? tx("js.wird_bestellt") : c.present ? (c.names || []).length + " " + tx("js.namen") : tx("js.noch_kein_zertifikat"),
+    sumLines([c.present ? [tx("js.gultig_bis"), date(c.not_after) + " (" + Math.floor(c.days_left) + tx("js.tage")] : null,
+      c.last_error ? [tx("js.letzter_fehler"), c.last_error] : null]),
+    certRows(c).concat(c.present ? delRows(st.delivery) : []));
+  const rd = st.redirect, rt = ((rd.mappings || [])[0] || {}).targets || (rd.target ? [rd.target] : []);
+  dot("d-redirect", lk("redirect")); $("s-redirect").innerHTML = tile("redirect", lk("redirect"), "", rd.provider ? rd.entry_host || "-" : tx("js.aus"),
+    rd.provider ? sumLines([[rt.length > 1 ? tx("js.verteilt_auf") : tx("js.ziel"), rt.join(" | ") || tx("js.unbekannt_port_fehlt")],
+      rd.last_error ? [tx("js.fehler"), rd.last_error] : null]) : "", redirectRows(rd));
   try { const l = await api("GET", "/api/logs"); const el = $("log");
     // 0.27.12 (owner): no refresh while text in the log is selected, else the selection is lost every 5 s
     const sel = window.getSelection && window.getSelection();
