@@ -334,7 +334,10 @@ class Agent:
         st = st or self.store.get()
         on = self.proxy_protocol_on(st)
         return {"enabled": on, "tunnel": ["%s:%d" % x for x in self.tunnelproxy.listening()] if on else [],
-                "errors": dict(self.tunnelproxy.errors) if on else {}}
+                "errors": dict(self.tunnelproxy.errors) if on else {},
+                # 0.36.2: who the relays saw as sender (what goes into the header); Proton may hand 10.2.0.1
+                "recent": sorted(list(getattr(self.tunnelproxy, "recent", [])) + list(getattr(self.lanproxy, "recent", [])),
+                                 key=lambda r: -r["at"])[:8] if on else []}
 
     def lan_entry_status(self, st=None):
         lan = self.lan_entry(st)

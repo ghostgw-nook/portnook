@@ -161,6 +161,8 @@ class ProxyProtocolRelayTest(unittest.TestCase):
             src, dst, rest = parse_v2(roundtrip(port, b"x" * 70000))
             self.assertEqual(dst, ("127.0.0.1", port))
             self.assertEqual(rest, b"x" * 70000)
+        self.assertEqual({(r["via"], r["ip"]) for r in proxy.recent}, {("wg0:%d" % p0, "127.0.0.1"),
+                                                                        ("wg1:%d" % p1, "127.0.0.1")})
         proxy.update([("wg0", [p0])], ("127.0.0.1", backend.port))  # standby gone: its port closed
         self.assertEqual(proxy.listening(), [("wg0", p0)])
         with self.assertRaises(OSError):

@@ -522,5 +522,8 @@
  "js.pp_tunnel": "Tunnel ports",
  "js.pp_bestatigen": "Turn on the PROXY protocol?\n\nYour reverse proxy must expect it on its HTTPS port (Zoraxy: PROXY Protocol on; nginx: listen … proxy_protocol). Otherwise nothing is reachable afterwards. Nginx Proxy Manager cannot do it yet.",
  "js.pp_eingeschaltet": "PROXY protocol turned on.",
- "js.pp_ausgeschaltet": "PROXY protocol turned off."
+ "js.pp_ausgeschaltet": "PROXY protocol turned off.",
+ "js.pp_absender": "Last senders",
+ "js.pp_noch_keine": "no connection yet",
+ "pp.gateway_hinweis": "10.2.0.1 is the Proton gateway: this server hands the connections on with its own address, the real IP never reaches portnook. Another Proton server may behave differently."
 }

@@ -276,7 +276,7 @@ class AgentFlowTest(unittest.TestCase):
         self.assertIn("--dport 51234 -j DNAT", self.fake.restores()[-1])
         self.assertEqual(self.tunnelproxy.listening(), [])
         self.assertFalse(self.lanproxy.proxy_protocol)
-        self.assertEqual(self.agent.status()["proxy_protocol"], {"enabled": False, "tunnel": [], "errors": {}})
+        self.assertEqual(self.agent.status()["proxy_protocol"], {"enabled": False, "tunnel": [], "errors": {}, "recent": []})
         with self.assertRaises(ValidationError):
             self.agent.set_proxy_protocol({"enabled": "yes"})
         res = self.agent.set_proxy_protocol({"enabled": True})

@@ -392,6 +392,7 @@ h3 { font-size: 14px; margin: 16px 0 4px; }
     <label class="inline"><input type="checkbox" id="pp-on"> {{pp.einschalten}}</label>
     <div class="hint">{{pp.hinweis}} <a href="https://github.com/ghostgw-nook/portnook/wiki/PROXY-protocol" target="_blank" rel="noopener noreferrer">{{pp.anleitung}}</a></div>
     <dl id="s-pp"></dl>
+    <div class="hint" id="pp-gw" hidden>{{pp.gateway_hinweis}}</div>
     <div id="pp-msg"></div>
   </div>
   <div class="card">
@@ -1246,7 +1247,10 @@ async function refresh() {
   $("pp-on").checked = !!pp.enabled;
   $("s-pp").innerHTML = dl([[tx("vpn.status"), pp.enabled ? tx("js.pp_an") : tx("js.ausgeschaltet")],
     pp.enabled ? [tx("js.pp_tunnel"), (pp.tunnel || []).join(", ") || tx("js.wartet_auf_vpn_port")] : null,
-    Object.keys(pp.errors || {}).length ? [tx("js.fehler"), Object.entries(pp.errors).map(([k, v]) => k + ": " + v).join(", ")] : null]);
+    Object.keys(pp.errors || {}).length ? [tx("js.fehler"), Object.entries(pp.errors).map(([k, v]) => k + ": " + v).join(", ")] : null,
+    // 0.36.2: the sender of the last connections, as it goes into the header
+    pp.enabled ? [tx("js.pp_absender"), (pp.recent || []).map(r => esc(r.ip) + " <span class=\"muted\">(" + esc(r.via) + ", " + new Date(r.at * 1000).toLocaleTimeString() + ")</span>").join("<br>") || esc(tx("js.pp_noch_keine")), true] : null]);
+  $("pp-gw").hidden = !(pp.recent || []).some(r => r.ip === "10.2.0.1");
   dot("d-ddns", lk("ddns")); $("s-ddns").innerHTML = ddnsBlocks(st);
   const worst = [L.cert, L.delivery].includes("error") ? "err" : ([L.cert, L.delivery].includes("warn") ? "warn" : lk("cert"));
   const c = st.cert;

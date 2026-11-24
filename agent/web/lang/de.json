@@ -522,5 +522,8 @@
  "js.pp_tunnel": "Tunnel-Ports",
  "js.pp_bestatigen": "PROXY-Protokoll einschalten?\n\nDein Reverse Proxy muss es auf seinem HTTPS-Port erwarten (Zoraxy: PROXY Protocol an; nginx: listen … proxy_protocol). Sonst ist danach nichts mehr erreichbar. Nginx Proxy Manager kann es noch nicht.",
  "js.pp_eingeschaltet": "PROXY-Protokoll eingeschaltet.",
- "js.pp_ausgeschaltet": "PROXY-Protokoll ausgeschaltet."
+ "js.pp_ausgeschaltet": "PROXY-Protokoll ausgeschaltet.",
+ "js.pp_absender": "Letzte Absender",
+ "js.pp_noch_keine": "noch keine Verbindung",
+ "pp.gateway_hinweis": "10.2.0.1 ist das Proton-Gateway: Dieser Server gibt die Verbindungen mit seiner eigenen Adresse weiter, die echte IP kommt bei portnook gar nicht an. Ein anderer Proton-Server kann das anders machen."
 }

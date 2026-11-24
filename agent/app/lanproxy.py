@@ -21,11 +21,14 @@ import ipaddress
 import socket
 import struct
 import threading
+import time
+from collections import deque
 
 from .log import log
 
 LAN_IF = "eth0"
 SO_BINDTODEVICE = getattr(socket, "SO_BINDTODEVICE", 25)
+RECENT = 8  # 0.36.2: senders of the last connections, in memory only (never logged)
 MAX_CONNS = 256  # relayed connections at once; more are refused until one ends
 CONNECT_TIMEOUT = 5
 CHUNK = 65536
@@ -64,6 +67,7 @@ class _Relay:
         self.proxy_protocol = False
         self.bind_devices = True  # tests on loopback: False
         self.errors = {}  # name of the listener -> last bind error
+        self.recent = deque(maxlen=RECENT)  # 0.36.2: {"at", "via", "ip"} of the last relayed connections
 
     @staticmethod
     def _name(key):
@@ -107,7 +111,7 @@ class _Relay:
         self.errors.pop(self._name(key), None)
         self._listeners[key] = sock
         self._ifindex[key] = self._index(key)
-        threading.Thread(target=self._accept, args=(sock,), name="%s-%d" % (self.what, port), daemon=True).start()
+        threading.Thread(target=self._accept, args=(sock, self._name(key)), name="%s-%d" % (self.what, port), daemon=True).start()
 
     def _close(self, key):
         sock = self._listeners.pop(key)
@@ -118,7 +122,7 @@ class _Relay:
             pass
         sock.close()
 
-    def _accept(self, lsock):
+    def _accept(self, lsock, name=""):
         while True:
             try:
                 client, _ = lsock.accept()
@@ -127,11 +131,15 @@ class _Relay:
             if not self._slots.acquire(blocking=False):
                 client.close()
                 continue
-            threading.Thread(target=self._relay, args=(client,), daemon=True).start()
+            threading.Thread(target=self._relay, args=(client, name), daemon=True).start()
 
-    def _relay(self, client):
+    def _relay(self, client, name=""):
         upstream = None
         try:
+            try:
+                self.recent.append({"at": int(time.time()), "via": name, "ip": client.getpeername()[0]})
+            except OSError:
+                pass
             backend = self._backend
             if not backend:
                 return
