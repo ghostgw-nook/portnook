@@ -84,10 +84,12 @@ def delivery(d):
 
 def redirect(r):
     """Provider set: last run ok and target current -> ok; target changed but not applied yet warn; error."""
-    if not r or not r.get("provider"):
+    if not r or not (r.get("provider") or r.get("providers")):
         return UNKNOWN
-    if r.get("last_error"):
+    if r.get("last_error") or any(x.get("last_error") for x in r.get("providers") or []):
         return ERROR
+    if not r.get("provider"):  # 0.32.0: only further providers
+        return OK if all(x.get("last_ok") for x in r["providers"]) else UNKNOWN
     if not r.get("last_ok"):
         return UNKNOWN
     return OK if not r.get("target") or r.get("target") == r.get("last_target") else WARN

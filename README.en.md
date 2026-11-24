@@ -81,7 +81,8 @@ below. Buttons to reconnect the VPN, renew NAT-PMP, test the backend and update 
 The Proton port changes now and then. A fixed address such as `https://start.example.com` therefore answers with a
 302 to the current target and is updated on every port change: through a **Cloudflare** rule or your own
 **script** (example: `.htaccess` via SSH on a Plesk web hosting). In round robin mode the redirect shares the
-clients between the active and the standby tunnel; with Cloudflare portnook sets up a Worker for that. More rules redirect further entry hosts, also
+clients between the active and the standby tunnel; with Cloudflare portnook sets up a Worker for that.
+Further start addresses can use their own providers, e.g. a second Cloudflare account or another web hosting. More rules redirect further entry hosts, also
 `*.entry` to `*.<name>.myaddr.tools` (subdomain to subdomain). All myaddr names are listed on the **Names** page;
 the "Use" column sets what each one is for (entry or endpoint). The certificate covers all names with a key.
 

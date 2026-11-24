@@ -99,6 +99,8 @@ dd { margin: 0; overflow-wrap: anywhere; }
   overflow-wrap: anywhere; }
 .msg.ok { border-color: var(--ok); } .msg.err { border-color: var(--err); } .msg.warn { border-color: var(--warn); }
 .msg dl { margin-top: 6px; }
+.xprov { border: 1px solid var(--line, #8884); border-radius: 8px; padding: 10px 12px; margin: 10px 0; }
+.xprov h3 { margin-top: 0; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .rr-epair { display: flex; gap: 6px; } .rr-epair .rr-esub { flex: 0 0 38%; min-width: 70px; }
 pre.log { background: var(--code); border-radius: 7px; padding: 10px; max-height: 340px; overflow: auto; font-size: 12px;
   margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -528,10 +530,17 @@ h3 { font-size: 14px; margin: 16px 0 4px; }
   <div class="card">
     <h2>{{redirect.weitere_regeln}}</h2>
     <details class="help"><summary>{{ui.hilfe}}</summary><p>{{redirect.weitere_regeln_hint}}</p></details>
-    <div class="tablewrap"><table><thead><tr><th>{{redirect.regel_eingang}}</th><th>{{redirect.regel_ziel}}</th><th>{{redirect.regel_ziel_name}}</th><th>{{redirect.regel_ergebnis}}</th><th></th></tr></thead>
+    <div class="tablewrap"><table><thead><tr><th>{{redirect.regel_eingang}}</th><th>{{redirect.regel_ziel}}</th><th>{{redirect.regel_ziel_name}}</th><th>{{redirect.regel_uber}}</th><th>{{redirect.regel_ergebnis}}</th><th></th></tr></thead>
       <tbody id="r-rules"></tbody></table></div>
     <div class="actions"><button class="primary" type="button" id="r-save2">{{redirect.speichern_und_ausfuhren}}</button>
       <button type="button" id="r-rule-add">{{redirect.regel_hinzufugen}}</button></div>
+  </div>
+  <div class="card">
+    <h2>{{redirect.weitere_anbieter}}</h2>
+    <details class="help"><summary>{{ui.hilfe}}</summary><p>{{redirect.weitere_anbieter_hint}}</p></details>
+    <div id="r-provs"></div>
+    <div class="actions"><button class="primary" type="button" id="r-save4">{{redirect.speichern_und_ausfuhren}}</button>
+      <button type="button" id="r-prov-add">{{redirect.anbieter_hinzufugen}}</button></div>
   </div>
   <div class="card" id="r-script">
     <h2>{{redirect.skript}}</h2>
@@ -1134,7 +1143,7 @@ function certRows(c) {
   return rows;
 }
 function redirectRows(r) {
-  if (!r.provider) return [[tx("vpn.status"), tx("js.aus")]];
+  if (!r.provider && !(r.providers || []).length) return [[tx("vpn.status"), tx("js.aus")]];
   return [[tx("js.eingang"), r.entry_host], [tx("js.anbieter"), r.provider === "cloudflare" ? tx("redirect.cloudflare") : tx("redirect.skript")],
     [tx("js.ziel"), r.target || tx("js.unbekannt_port_fehlt")],
     r.mode === "roundrobin" ? [tx("redirect.modus"), tx("js.rr_" + (r.rr || "off"))] : null,
@@ -1143,7 +1152,14 @@ function redirectRows(r) {
     [tx("js.zuletzt_gesetzt"), r.last_target ? r.last_target + " (" + age(r.last_ok) + ")" : "-"],
     r.queued ? [tx("js.wartet"), tx("js.kein_vpn_tunnel") + r.queued + tx("js.vorgemerkt")] : null,
     r.last_error ? [tx("js.fehler"), r.last_error] : null,
-  ].concat((r.mappings || []).slice(1).map((m) => [tx("js.regel"), m.entry + " -> " + (m.targets || [m.target]).join(" | ")]));
+  ].concat((r.mappings || []).slice(1).map((m) => [tx("js.regel"), m.entry + " -> " + (m.targets || [m.target]).join(" | ") + (m.via ? " (" + provLabel(m.via, r) + ")" : "")]))
+   .concat((r.providers || []).map((x) => [provLabel(x.id, r), (x.kind === "cloudflare" ? tx("redirect.cloudflare") : tx("redirect.skript")) + ": " +
+     (x.last_error ? tx("js.fehler_3") + x.last_error : x.last_ok ? tx("js.ok") + age(x.last_ok) + (x.last_detail ? " (" + x.last_detail + ")" : "") : "-")]));
+}
+// 0.32.0: further providers are numbered from 2 in their saved order
+function provLabel(id, r) {
+  const i = ((r && r.providers) || S.provs || []).findIndex((x) => x.id === id);
+  return tx("redirect.anbieter_n").replace("{n}", String(i < 0 ? "?" : i + 2));
 }
 function delRows(d) {
   const row = (name, t, what) => !t.configured ? null : [name, what + ": " + (t.error ? tx("js.fehler_3") + t.error
@@ -1377,6 +1393,8 @@ async function refreshRedirect() {
     $("r-mode").value = r.mode || "failover";
     $("r-port").value = r.fixed_port || ""; $("r-zone").value = r.cf.zone || "";
     S.rulesCtx = { active: r.active_name || "", bound: r.profile_names || [], endpoints: r.endpoints || [], entries: (st.names || []).filter((n) => n.role === "entry").sort(byNameOrder).map((n) => n.name + "." + n.domain) };
+    $("r-provs").innerHTML = "";
+    (r.providers || []).forEach(addProv);
     $("r-rules").innerHTML = "";
     [{ entry: r.entry_host, sub: r.sub, to: r.to }].concat(r.rules || []).forEach(addRule);
     try { $("r-text").value = (await api("GET", "/api/redirect/script")).script; } catch (e) {}
@@ -1436,17 +1454,19 @@ document.querySelectorAll("button[data-example]").forEach((btn) => btn.addEventL
 $("r-save").addEventListener("click", (ev) => busy(ev.target, async () => {
   const body = { provider: document.querySelector("input[name=r-prov]:checked").value, mode: $("r-mode").value, status: Number($("r-status").value), fixed_port: $("r-port").value.trim(),
     cf: { zone: $("r-zone").value.trim(), token: $("r-token").value.trim() }, gen: genOf(),
-    rules: [...document.querySelectorAll("#r-rules tr")].map(ruleOf) };
+    rules: [...document.querySelectorAll("#r-rules tr")].map(ruleOf), providers: [...document.querySelectorAll("#r-provs .xprov")].map(provOf) };
   if (body.provider === "script" && !body.gen.kind) body.script = $("r-text").value;
   if (body.provider !== "script") delete body.gen;
   const main = body.rules.shift() || { entry: "", sub: "", to: "" };
+  delete main.via;
   Object.assign(body, { entry_host: main.entry, sub: main.sub, to: main.to });
   try {
     await api("POST", "/api/redirect", body);
     $("r-token").value = "";
-    if (body.provider) {
+    S.redirFilled = false;  // new providers get their ids from the agent
+    if (body.provider || body.providers.length) {
       const r = await api("POST", "/api/action/redirect-run", {});
-      msg("r-msg", r.ok ? "ok" : "err", r.ok ? tx("js.gespeichert_redirect_gesetzt") + esc(r.target) : tx("js.gespeichert_aber") + esc(r.error));
+      msg("r-msg", r.ok ? "ok" : "err", r.ok ? tx("js.gespeichert_redirect_gesetzt") + esc(r.target || "") : tx("js.gespeichert_aber") + esc(r.error));
     } else msg("r-msg", "ok", tx("js.gespeichert_redirect_aus"));
   } catch (e) { msg("r-msg", "err", esc(e.message)); }
   refreshRedirect();
@@ -1507,10 +1527,18 @@ $("p-test").addEventListener("click", (ev) => busy(ev.target, async () => {
 // ---- rewrite rules and further myaddr names (rows edited in place) -------------------------
 function delBtn() { return '<button type="button" data-del>' + esc(tx("js.loschen")) + "</button>"; }
 document.addEventListener("click", (ev) => { const b = ev.target.closest("button[data-del]"); if (b) b.closest("tr").remove(); });
+function viaOptions(sel, keep) {
+  const v = keep !== undefined ? keep : sel.value, n = document.querySelectorAll("#r-provs .xprov").length;
+  sel.innerHTML = '<option value="">' + esc(tx("redirect.anbieter_haupt")) + "</option>" +
+    [...document.querySelectorAll("#r-provs .xprov")].map((d, i) => '<option value="' + esc(d.dataset.id || "new" + i) + '">' + esc(tx("redirect.anbieter_n").replace("{n}", String(i + 2))) + "</option>").join("");
+  sel.value = [...sel.options].some((o) => o.value === v) ? v : "";
+  return n;
+}
+function refreshVia() { document.querySelectorAll("#r-rules .rr-via").forEach((s) => viaOptions(s)); }
 function ruleOf(tr) {
   const sel = tr.querySelector(".rr-entry-sel").value, esub = tr.querySelector(".rr-esub").value.trim().toLowerCase().replace(/\.+$/, "");
   return { entry: sel === "custom" ? tr.querySelector(".rr-entry").value.trim().toLowerCase() : (esub ? esub + "." : "") + sel,
-    sub: tr.querySelector(".rr-sub").value.trim().toLowerCase(), to: tr.querySelector(".rr-to").value };
+    sub: tr.querySelector(".rr-sub").value.trim().toLowerCase(), to: tr.querySelector(".rr-to").value, via: tr.querySelector(".rr-via").value };
 }
 function rulePreview(tr) {
   const r = ruleOf(tr), ctx = S.rulesCtx || { endpoints: [] };
@@ -1533,6 +1561,7 @@ function addRule(r) {
     '<input type="text" class="rr-entry" spellcheck="false" placeholder="start.example.ch' + (first ? "" : " / *.example.ch") + '"></td>' +
     '<td><input type="text" class="rr-sub" spellcheck="false" placeholder="' + esc(tx("js.regel_ziel_placeholder")) + '"></td>' +
     '<td><select class="rr-to">' + ctx.endpoints.map((e, i) => opt(i ? e : "", ctx.active && !i ? tx("js.aktives_profil") : e + (i ? "" : " (" + tx("js.hauptname") + ")"))).join("") + "</select></td>" +
+    '<td><select class="rr-via"' + (first ? " disabled" : "") + "></select></td>" +
     '<td class="small"><span class="rr-out"></span><span class="muted small rr-follow" style="display:block"></span></td><td>' + (first ? '<span class="muted small">' + esc(tx("js.haupteingang")) + "</span>" : delBtn()) + "</td>";
   const entry = (r && r.entry) || "";
   const sel = tr.querySelector(".rr-entry-sel");
@@ -1543,12 +1572,67 @@ function addRule(r) {
   tr.querySelector(".rr-entry").value = base ? "" : entry;
   tr.querySelector(".rr-sub").value = (r && r.sub) || "";
   tr.querySelector(".rr-to").value = (r && r.to) || "";
+  viaOptions(tr.querySelector(".rr-via"), (r && r.via) || "");
   tr.addEventListener("input", () => rulePreview(tr)); tr.addEventListener("change", () => rulePreview(tr));
   $("r-rules").appendChild(tr);
   rulePreview(tr);
 }
 $("r-rule-add").addEventListener("click", () => addRule());
-["r-save2", "r-save3"].forEach((id) => $(id).addEventListener("click", () => $("r-save").click()));
+// ---- further providers (0.32.0) ----
+function addProv(x) {
+  x = x || { kind: "cloudflare", gen: { kind: "htaccess" } };
+  const d = document.createElement("div");
+  d.className = "xprov"; d.dataset.id = x.id || "";
+  const g = x.gen || {}, art = x.kind === "cloudflare" ? "cloudflare" : (g.kind || "own");
+  const opt = (v, t) => '<option value="' + v + '">' + esc(tx(t)) + "</option>";
+  d.innerHTML = '<h3><span class="xp-title"></span><button type="button" class="xp-del">' + esc(tx("js.loschen")) + "</button></h3>" +
+    '<label>' + esc(tx("redirect.anbieter_art")) + '</label><select class="xp-art">' + opt("cloudflare", "redirect.cloudflare") + opt("htaccess", "gen.htaccess") +
+    opt("php", "gen.php") + opt("own", "gen.eigenes") + "</select>" +
+    '<div class="xp-cf cols"><div><label>' + esc(tx("redirect.zone_zone_id_oder_domain")) + '</label><input type="text" class="xp-zone" spellcheck="false" autocomplete="off"></div>' +
+    '<div><label>' + esc(tx("redirect.api_token")) + ' <span class="muted small xp-tstate"></span></label><input type="password" class="xp-token" autocomplete="off" placeholder="' + esc(tx("myaddr.leer_lassen_unverandert")) + '"></div></div>' +
+    '<div class="xp-gen cols"><div><label>' + esc(tx("gen.user")) + '</label><input type="text" class="xp-user" spellcheck="false" autocomplete="off" placeholder="webuser"></div>' +
+    '<div><label>' + esc(tx("gen.host")) + '</label><input type="text" class="xp-host" spellcheck="false" autocomplete="off" placeholder="server.example.ch"></div>' +
+    '<div><label>' + esc(tx("gen.port")) + '</label><input type="text" class="xp-port" inputmode="numeric" placeholder="22"></div>' +
+    '<div><label>' + esc(tx("gen.root")) + '</label><input type="text" class="xp-root" spellcheck="false" autocomplete="off" placeholder="httpdocs"></div></div>' +
+    '<div class="xp-own"><label>' + esc(tx("gen.skript")) + '</label><textarea class="xp-text" rows="8" spellcheck="false" autocomplete="off"></textarea></div>' +
+    '<p class="hint xp-hint"></p>';
+  d.querySelector(".xp-art").value = art;
+  d.querySelector(".xp-zone").value = (x.cf && x.cf.zone) || "";
+  d.querySelector(".xp-tstate").textContent = x.cf && x.cf.token_set ? tx("js.gespeichert") : "";
+  d.querySelector(".xp-user").value = g.user || ""; d.querySelector(".xp-host").value = g.host || "";
+  d.querySelector(".xp-port").value = g.port || ""; d.querySelector(".xp-root").value = g.root || "";
+  d.querySelector(".xp-text").value = x.script || "";
+  const toggle = () => {
+    const a = d.querySelector(".xp-art").value;
+    d.querySelector(".xp-cf").classList.toggle("hidden", a !== "cloudflare");
+    d.querySelector(".xp-gen").classList.toggle("hidden", a !== "htaccess" && a !== "php");
+    d.querySelector(".xp-own").classList.toggle("hidden", a !== "own");
+    d.querySelector(".xp-hint").textContent = tx(a === "cloudflare" ? "redirect.token_mit_der_berechtigung_zone" : a === "own" ? "redirect.lauft_mit_bin_sh_60" : "gen.hinweis");
+  };
+  d.querySelector(".xp-art").addEventListener("change", toggle);
+  d.querySelector(".xp-del").addEventListener("click", () => { d.remove(); numberProvs(); });
+  $("r-provs").appendChild(d);
+  toggle(); numberProvs();
+}
+function numberProvs() {
+  document.querySelectorAll("#r-provs .xprov").forEach((d, i) => { d.querySelector(".xp-title").textContent = tx("redirect.anbieter_n").replace("{n}", String(i + 2)); });
+  refreshVia();
+}
+function provOf(d, i) {
+  const a = d.querySelector(".xp-art").value, x = { id: d.dataset.id || "" };
+  if (a === "cloudflare") {
+    x.kind = "cloudflare"; x.cf = { zone: d.querySelector(".xp-zone").value.trim() };
+    if (d.querySelector(".xp-token").value.trim()) x.cf.token = d.querySelector(".xp-token").value.trim();
+  } else {
+    x.kind = "script";
+    x.gen = a === "own" ? { kind: "" } : { kind: a, user: d.querySelector(".xp-user").value.trim(), host: d.querySelector(".xp-host").value.trim(),
+      port: d.querySelector(".xp-port").value.trim() || 22, root: d.querySelector(".xp-root").value.trim() };
+    if (a === "own") x.script = d.querySelector(".xp-text").value;
+  }
+  return x;
+}
+$("r-prov-add").addEventListener("click", () => addProv());
+["r-save2", "r-save3", "r-save4"].forEach((id) => $(id).addEventListener("click", () => $("r-save").click()));
 const DOMAINS = ["myaddr.tools", "myaddr.dev", "myaddr.io"];
 function fillNames(st) {
   const m = st.myaddr || {}, d = st.ddns || {};

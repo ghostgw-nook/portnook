@@ -37,6 +37,10 @@ MAX_SCRIPT = 32 * 1024
 OUTPUT_LINES = 50
 RETRY = 300
 MAX_RULES = 10
+MAX_PROVIDERS = 5  # 0.32.0: further providers besides the main one
+PROVIDER_KINDS = ("cloudflare", "script")
+_PID = re.compile(r"a[0-9]{1,3}")
+STATE_KEYS = ("last_ok", "last_try", "last_error", "last_detail", "last_rc", "last_output", "last_rules", "cf_worker")
 _ZONE_ID = re.compile(r"[0-9a-f]{32}")
 _SUB = re.compile(r"[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?")
 EXAMPLES = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "examples")
@@ -284,17 +288,24 @@ def _multipart(js):
     return body.encode("utf-8"), "multipart/form-data; boundary=" + boundary
 
 
-def _own_rules(request, base, token, zone, device):
-    """Redirect rules of portnook in the zone: ``(ruleset id, [rule])``."""
+def _own_rules(request, base, token, zone, device, hosts=None):
+    """Redirect rules of portnook in the zone (0.32.0: only those of ``hosts`` if given): ``(ruleset id, [rule])``."""
     rs = _cf(request, "GET", "%s/zones/%s/rulesets/phases/%s/entrypoint" % (base, zone, PHASE), token, device,
              ok404=True)
     if not rs:
         return None, []
+    names = None if hosts is None else {d for h in hosts for d in (rule_description(h), LEGACY_RULE_PREFIX + h)}
     return rs.get("id"), [r for r in rs.get("rules") or []
-                          if str(r.get("description", "")).startswith(("portnook redirect ", LEGACY_RULE_PREFIX))]
+                          if str(r.get("description", "")).startswith(("portnook redirect ", LEGACY_RULE_PREFIX))
+                          and (names is None or r.get("description") in names)]
 
 
-def cloudflare_worker_apply(token, zone, rules, status, device=None, request=httpc.request):
+def worker_name(pid=""):
+    """0.32.0: every Cloudflare provider has its own Worker, so two in one account don't overwrite each other."""
+    return WORKER_NAME + ("-" + pid if pid else "")
+
+
+def cloudflare_worker_apply(token, zone, rules, status, device=None, request=httpc.request, name=WORKER_NAME):
     """Upload the Worker and point one route per entry host (``host/*``) at it. Redirect rules of portnook are
     removed, as Cloudflare runs them before any Worker; routes of other Workers are left alone."""
     base = cf_base()
@@ -305,7 +316,7 @@ def cloudflare_worker_apply(token, zone, rules, status, device=None, request=htt
         raise RedirectError("Cloudflare: Konto der Zone unbekannt.")
     body, ctype = _multipart(worker_js(rules, status))
     try:
-        resp = request("PUT", "%s/accounts/%s/workers/scripts/%s" % (base, account, WORKER_NAME), body=body,
+        resp = request("PUT", "%s/accounts/%s/workers/scripts/%s" % (base, account, name), body=body,
                        device=device, timeout=30, headers={"Authorization": "Bearer " + token,
                                                            "Accept": "application/json", "Content-Type": ctype})
     except httpc.HttpError as err:
@@ -320,24 +331,24 @@ def cloudflare_worker_apply(token, zone, rules, status, device=None, request=htt
         r = have.get(pat)
         if r is None:
             _cf(request, "POST", "%s/zones/%s/workers/routes" % (base, zone), token, device,
-                body={"pattern": pat, "script": WORKER_NAME})
-        elif r.get("script") != WORKER_NAME:
+                body={"pattern": pat, "script": name})
+        elif r.get("script") != name:
             raise RedirectError("Cloudflare: Route %s gehört zu einem anderen Worker." % pat)
-    gone = [r for r in routes if r.get("script") == WORKER_NAME and r.get("pattern") not in wanted]
+    gone = [r for r in routes if r.get("script") == name and r.get("pattern") not in wanted]
     for r in gone:
         _cf(request, "DELETE", "%s/zones/%s/workers/routes/%s" % (base, zone, r["id"]), token, device)
-    rid, own = _own_rules(request, base, token, zone, device)
+    rid, own = _own_rules(request, base, token, zone, device, hosts=[e for e, _ in rules])
     for r in own:
         _cf(request, "DELETE", "%s/zones/%s/rulesets/%s/rules/%s" % (base, zone, rid, r["id"]), token, device)
     return "Worker aktualisiert, %d Route(n)" % len(wanted)
 
 
-def cloudflare_worker_remove(token, zone, device=None, request=httpc.request):
+def cloudflare_worker_remove(token, zone, device=None, request=httpc.request, name=WORKER_NAME):
     """Back to redirect rules: remove the routes of the portnook Worker (the script itself stays, unused)."""
     base = cf_base()
     zone = _zone_id(request, base, token, zone, device)
     for r in _cf(request, "GET", "%s/zones/%s/workers/routes" % (base, zone), token, device) or []:
-        if r.get("script") == WORKER_NAME:
+        if r.get("script") == name:
             _cf(request, "DELETE", "%s/zones/%s/workers/routes/%s" % (base, zone, r["id"]), token, device)
 
 
@@ -443,7 +454,7 @@ class Redirect:
         fixed = body.get("fixed_port")
         new["fixed_port"] = validate.port(fixed, "Fester Port") if fixed not in (None, "", 0) else 0
         entry = str(body.get("entry_host") or "").strip().lower().rstrip(".")
-        if provider and not (validate.is_hostname(entry) and "." in entry):
+        if provider and not (validate.is_hostname(entry) and "." in entry):  # the main entry goes via the main provider
             raise ValidationError("Eingangs-Host (z. B. start.example.ch) fehlt oder ist ungültig.")
         new["entry_host"] = entry
         cf = dict(cur.get("cf") or {})
@@ -471,7 +482,14 @@ class Redirect:
             self._write("script.sh", text, 0o700)
         if provider == "script" and not os.path.exists(self._p("script.sh")):
             raise ValidationError("Bitte ein Skript eintragen.")
-        new["rules"] = self._rules(body.get("rules", cur.get("rules") or []), provider, mode)
+        new["providers"], new["xstate"] = self._providers(body.get("providers", cur.get("providers") or []), cur)
+        kinds = {"": provider}
+        kinds.update({x["id"]: x["kind"] for x in new["providers"]})
+        rows = body.get("rules", cur.get("rules") or [])
+        if isinstance(rows, list):  # a provider added in the same save: the UI names it "new<position>"
+            pos = {"new%d" % i: x["id"] for i, x in enumerate(new["providers"])}
+            rows = [dict(r, via=pos.get(r.get("via"), r.get("via"))) if isinstance(r, dict) else r for r in rows]
+        new["rules"] = self._rules(rows, kinds, mode)
         for r in new["rules"]:
             r["to"] = self._to(r.get("to"))
         for k in ("cf_worker", "last_target", "last_ok", "last_try", "last_error", "last_detail", "last_rc", "last_output"):
@@ -480,12 +498,77 @@ class Redirect:
         new["last_target"] = ""  # run once after saving
         self.agent.store.update("redirect", new, replace=True)
         log("redirect: provider %s, entry %s", provider or "off", entry or "-")
-        self.rt.update({"next_try": 0, "next_try2": 0})
+        for x in new["providers"]:
+            log("redirect: provider %s (%s)", x["id"], x["kind"])
+        self.rt.update({"next_try": 0, "next_try2": 0, "xtry": {}})
         self.agent.trigger_check()
         return {"ok": True}
 
+    def _providers(self, rows, cur):
+        """0.32.0: further providers ``[{"id", "kind", "cf": {zone, token}, "gen"}]`` (a script: ``gen`` or an
+        own script text). Tokens and scripts are kept when left empty; a removed provider's script is deleted."""
+        if not isinstance(rows, list) or len(rows) > MAX_PROVIDERS:
+            raise ValidationError("Höchstens %d weitere Anbieter." % MAX_PROVIDERS)
+        old = {x["id"]: x for x in cur.get("providers") or []}
+        used = set(old)
+        out, writes = [], []
+        for i, row in enumerate(rows):
+            row = row if isinstance(row, dict) else {}
+            kind = str(row.get("kind") or "")
+            if kind not in PROVIDER_KINDS:
+                raise ValidationError("Anbieter %d: Cloudflare oder Skript." % (i + 2))
+            pid = str(row.get("id") or "")
+            if pid not in old or not _PID.fullmatch(pid):
+                n = 2
+                while "a%d" % n in used:
+                    n += 1
+                pid = "a%d" % n
+                used.add(pid)
+            prev = old.get(pid, {})
+            x = {"id": pid, "kind": kind}
+            if kind == "cloudflare":
+                cfb = row.get("cf") if isinstance(row.get("cf"), dict) else {}
+                zone = str(cfb.get("zone") or "").strip().lower()
+                if not (_ZONE_ID.fullmatch(zone) or validate.is_hostname(zone)):
+                    raise ValidationError("Anbieter %d: Cloudflare-Zone (Zone-ID oder Domain)." % (i + 2))
+                token = str(cfb.get("token") or "").strip()
+                if token and not re.fullmatch(r"[A-Za-z0-9_-]{20,200}", token):
+                    raise ValidationError("Anbieter %d: Cloudflare-API-Token ungültig." % (i + 2))
+                token = token or (prev.get("cf") or {}).get("token", "")
+                if not token:
+                    raise ValidationError("Anbieter %d: Cloudflare-API-Token fehlt." % (i + 2))
+                x["cf"] = {"zone": zone, "token": token}
+            else:
+                g = check_gen(row.get("gen"))
+                x["gen"] = g
+                name = "script-%s.sh" % pid
+                if g["kind"]:
+                    writes.append((name, generate(g)))
+                elif "script" in row:
+                    text = str(row.get("script") or "").replace("\r\n", "\n")
+                    if len(text.encode()) > MAX_SCRIPT:
+                        raise ValidationError("Skript zu gross (max. 32 KiB).")
+                    if not text.strip():
+                        raise ValidationError("Anbieter %d: bitte ein Skript eintragen." % (i + 2))
+                    writes.append((name, text))
+                elif not os.path.exists(self._p(name)):
+                    raise ValidationError("Anbieter %d: bitte ein Skript eintragen." % (i + 2))
+            out.append(x)
+        for name, text in writes:
+            self._write(name, text, 0o700)
+        keep = {x["id"] for x in out}
+        for pid in set(old) - keep:
+            try:
+                os.unlink(self._p("script-%s.sh" % pid))
+            except OSError:
+                pass
+        xs = {k: v for k, v in (cur.get("xstate") or {}).items() if k in keep}
+        for k in xs:
+            xs[k]["last_rules"] = ""  # run once after saving
+        return out, xs
+
     @staticmethod
-    def _rules(rows, provider, mode="failover"):  # "to" is checked by set_config
+    def _rules(rows, kinds, mode="failover"):  # "to" is checked by set_config
         """More entry hosts: ``{"entry": "eingang-muster.myaddr.io" or "*.eingang-muster.myaddr.io", "sub": "tv" / "" / "*"}``."""
         if not isinstance(rows, list) or len(rows) > MAX_RULES:
             raise ValidationError("Höchstens %d weitere Regeln." % MAX_RULES)
@@ -504,14 +587,22 @@ class Redirect:
                 raise ValidationError("Ziel * (gleiche Subdomain) nur mit Eingang *.host.")
             if sub not in ("", "*") and not _SUB.fullmatch(sub):
                 raise ValidationError("Ziel-Subdomain %s: nur a-z, 0-9 und '-'." % sub)
-            if wild and provider == "cloudflare" and mode != "roundrobin":
+            kinds = kinds if isinstance(kinds, dict) else {"": kinds}
+            via = str(row.get("via") or "")
+            if via not in kinds:
+                raise ValidationError("Eingang %s: Anbieter unbekannt." % entry)
+            if wild and kinds[via] == "cloudflare" and mode != "roundrobin":
                 raise ValidationError("Cloudflare: *.host nur mit Skript oder im Modus Round Robin (Worker).")
-            out.append({"entry": entry, "sub": sub, "to": row.get("to")})
+            rule = {"entry": entry, "sub": sub, "to": row.get("to")}
+            if via:
+                rule["via"] = via
+            out.append(rule)
         return out
 
-    def mappings(self, cfg, tgt):
-        """``[(entry host, target URL)]``: the main entry first, then the rules (``*`` = same subdomain)."""
-        return [(e, urls[0]) for e, urls in self.mappings_multi(cfg, tgt, rr=False)]
+    def mappings(self, cfg, tgt, via=None):
+        """``[(entry host, target URL)]``: the main entry first, then the rules (``*`` = same subdomain).
+        ``via``: only the hosts of that provider (``""`` = the main one)."""
+        return [(e, urls[0]) for e, urls in self.mappings_multi(cfg, tgt, rr=False, via=via)]
 
     def rr_standby(self, cfg=None):
         """0.28.0 (owner): ``(name, port)`` of the standby tunnel when the clients are shared between the active
@@ -542,7 +633,10 @@ class Redirect:
             return "no_name"
         return "no_port"
 
-    def mappings_multi(self, cfg, tgt, rr=True):
+    def mappings_multi(self, cfg, tgt, rr=True, via=None):
+        return [(e, u) for e, u, v in self.mappings_via(cfg, tgt, rr) if via is None or v == via]
+
+    def mappings_via(self, cfg, tgt, rr=True):
         """``[(entry host, [target URLs])]``. One URL per rule, or (round robin, 0.28.0) one per tunnel for rules
         that follow the profile names: the active tunnel first, then the standby. Fixed names stay single."""
         own = self.active_name()
@@ -563,10 +657,10 @@ class Redirect:
                     out.append(u)
             return out
 
-        out = [(cfg.get("entry_host", ""), urls(cfg.get("to"), cfg.get("sub"), tgt["url"]))]
+        out = [(cfg.get("entry_host", ""), urls(cfg.get("to"), cfg.get("sub"), tgt["url"]), "")]
         # fixed hosts before *.host, so app.eingang-muster... wins over *.eingang-muster... (0.23.0)
         for r in sorted(cfg.get("rules") or [], key=lambda r: r["entry"].startswith("*.")):
-            out.append((r["entry"], urls(r.get("to"), r["sub"])))
+            out.append((r["entry"], urls(r.get("to"), r["sub"]), r.get("via", "")))
         return out
 
     def script_text(self):
@@ -644,15 +738,15 @@ class Redirect:
         log("redirect: ssh test %s@%s rc=%s", g["user"], g["host"], rc)
         return {"ok": rc == 0, "rc": rc, "output": lines}
 
-    def run_script(self, tgt, cfg):
-        path = self._p("script.sh")
+    def run_script(self, tgt, cfg, rules=None, name="script.sh"):
+        path = self._p(name)
         if not os.path.exists(path):
             raise RedirectError("Kein Skript gespeichert.")
         env = dict(self._base_env())
         env.update({"PF_TARGET_URL": tgt["url"], "PF_TARGET_HOST": tgt["host"], "PF_PORT": str(tgt["port"]),
                "PF_IP": tgt["ip"], "PF_STATUS_CODE": str(cfg.get("status", 302)),
-               "PF_ENTRY_HOST": cfg.get("entry_host", "")})
-        rules = self.mappings_multi(cfg, tgt)
+               "PF_ENTRY_HOST": cfg.get("entry_host", "") if rules is None else (rules[0][0] if rules else "")})
+        rules = self.mappings_multi(cfg, tgt, via="") if rules is None else rules
         env.update({"PF_RULES": "\n".join("%s %s" % (e, " | ".join(u)) for e, u in rules),
                     "PF_HTACCESS": htaccess(rules, cfg.get("status", 302)), "PF_PHP": php(rules, cfg.get("status", 302))})
         return self._exec(path, env)
@@ -670,74 +764,146 @@ class Redirect:
         return rc, lines
 
     def apply(self, force=False):
-        """Run the provider if the target changed (or ``force``). Returns a result dict."""
+        """Run the providers if the target changed (or ``force``). Returns a result dict for the main provider;
+        0.32.0: the further providers run after it, each on its own (``extra``), and an error there makes the
+        whole result fail."""
         with self.lock:
             cfg = self.cfg()
-            provider = cfg.get("provider")
-            if not provider:
+            if not cfg.get("provider") and not cfg.get("providers"):
                 return {"ok": False, "skipped": "kein Anbieter"}
             tgt = self.target(cfg)
             if not tgt:
                 return {"ok": False, "skipped": "Ziel unbekannt (Port, Name oder IP fehlt)"}
             now = int(self.clock())
-            worker = provider == "cloudflare" and cfg.get("mode") == "roundrobin"
-            multi = provider == "script" or worker
-            rules = json.dumps(self.mappings_multi(cfg, tgt) if multi else self.mappings(cfg, tgt))
-            # 0.27.13 (owner): set the redirect once after every start, even if the stored target is the same, so
-            # the entry host is surely right after an update or restart (one script run / Cloudflare call)
-            fresh = not self.rt.get("set_since_start")  # a failed run still waits for RETRY
-            if not force and ((not fresh and tgt["url"] == cfg.get("last_target") and rules == cfg.get("last_rules", rules))
-                              or now < self.rt["next_try"]):
-                return {"ok": True, "skipped": "aktuell"}
-            if not self.may_run(provider):
-                # no VPN tunnel: Cloudflare / the script are not contacted; the latest target waits (0.10.1)
-                if self.rt.get("queued") != tgt["url"]:
-                    log("redirect to %s queued: no vpn tunnel", tgt["url"])
-                self.rt["queued"] = tgt["url"]
-                return {"ok": False, "queued": tgt["url"],
-                        "skipped": "kein VPN-Tunnel, Ziel %s vorgemerkt" % tgt["url"]}
-            self.rt["queued"] = ""
-            upd = {"last_try": now}
-            try:
-                if worker:
-                    cf = cfg.get("cf") or {}
-                    kw = {"request": self.request} if self.request else {}
-                    detail = cloudflare_worker_apply(cf["token"], cf["zone"], self.mappings_multi(cfg, tgt),
-                                                     cfg.get("status", 302), device=self.agent.egress_device(), **kw)
-                    upd.update({"last_rc": 0, "last_output": [], "cf_worker": True})
-                elif provider == "cloudflare":
-                    cf = cfg.get("cf") or {}
-                    kw = {"request": self.request} if self.request else {}
-                    if cfg.get("cf_worker"):  # back from round robin: the Worker routes go, the rules come back
-                        cloudflare_worker_remove(cf["token"], cf["zone"], device=self.agent.egress_device(), **kw)
-                        upd["cf_worker"] = False
-                    detail = "; ".join("%s: %s" % (e, cloudflare_apply(cf["token"], cf["zone"], e, u, cfg.get("status", 302),
-                                                                        device=self.agent.egress_device(), **kw))
-                                       for e, u in self.mappings(cfg, tgt))
-                    upd.update({"last_rc": 0, "last_output": []})
-                else:
-                    rc, lines = self.run_script(tgt, cfg)
-                    upd.update({"last_rc": rc, "last_output": lines})
-                    for line in lines[-5:]:
-                        log("redirect script: %s", line[:200])
-                    if rc != 0:
-                        raise RedirectError("Skript beendet mit Code %d" % rc)
-                    detail = "Skript ok"
-                upd.update({"last_target": tgt["url"], "last_rules": rules, "last_ok": now, "last_error": "", "last_detail": detail})
-                self.rt["next_try"] = 0
-                self.rt["set_since_start"] = True
-                log("redirect %s -> %s (%s)", cfg.get("entry_host"), tgt["url"], detail)
-                result = {"ok": True, "target": tgt["url"], "detail": detail}
-            except (RedirectError, SetupError, myaddr.MyaddrError) as err:
-                upd["last_error"] = str(err)[:200]
-                self.rt["next_try"] = now + RETRY
-                log("redirect failed: %s", upd["last_error"])
-                self.agent.notify.event("redirect_error", "Redirect fehlgeschlagen", upd["last_error"])
-                result = {"ok": False, "error": upd["last_error"], "rc": upd.get("last_rc")}
-            if self.cfg().get("provider") == provider:
-                self.agent.store.update("redirect", upd)
-            result["output"] = upd.get("last_output", [])
+            result = self._apply_main(cfg, tgt, force, now) if cfg.get("provider") else {"ok": True, "skipped": "kein Hauptanbieter"}
+            extra = [self._apply_extra(x, cfg, tgt, force, now) for x in cfg.get("providers") or []]
+            if extra:
+                result["extra"] = extra
+                bad = [x for x in extra if not x.get("ok") and not x.get("queued")]
+                if bad and result.get("ok"):
+                    result.update({"ok": False, "error": "Anbieter %s: %s" % (bad[0]["id"], bad[0].get("error", ""))})
             return result
+
+    def _apply_extra(self, x, cfg, tgt, force, now):
+        """One further provider (0.32.0) with its own rules, state and retry."""
+        pid, kind = x["id"], x["kind"]
+        worker = kind == "cloudflare" and cfg.get("mode") == "roundrobin"
+        multi = kind == "script" or worker
+        rules = self.mappings_multi(cfg, tgt, via=pid) if multi else self.mappings(cfg, tgt, via=pid)
+        if not rules and not (cfg.get("xstate") or {}).get(pid, {}).get("cf_worker"):
+            return {"id": pid, "ok": True, "skipped": "keine Eingänge"}
+        key = json.dumps(rules)
+        st = dict((cfg.get("xstate") or {}).get(pid) or {})
+        tries = self.rt.setdefault("xtry", {})
+        fresh = pid not in self.rt.setdefault("xset", set())
+        if not force and ((not fresh and key == st.get("last_rules")) or now < tries.get(pid, 0)):
+            return {"id": pid, "ok": True, "skipped": "aktuell"}
+        if not self.may_run(kind):
+            return {"id": pid, "ok": False, "queued": tgt["url"]}
+        st["last_try"] = now
+        kw = {"request": self.request} if self.request else {}
+        dev = self.agent.egress_device()
+        try:
+            if worker:
+                cf = x["cf"]
+                detail = cloudflare_worker_apply(cf["token"], cf["zone"], rules, cfg.get("status", 302), device=dev,
+                                                 name=worker_name(pid), **kw)
+                st.update({"last_rc": 0, "last_output": [], "cf_worker": True})
+            elif kind == "cloudflare":
+                cf = x["cf"]
+                if st.get("cf_worker"):
+                    cloudflare_worker_remove(cf["token"], cf["zone"], device=dev, name=worker_name(pid), **kw)
+                    st["cf_worker"] = False
+                detail = "; ".join("%s: %s" % (e, cloudflare_apply(cf["token"], cf["zone"], e, u, cfg.get("status", 302),
+                                                                    device=dev, **kw)) for e, u in rules) or "keine Eingänge"
+                st.update({"last_rc": 0, "last_output": []})
+            else:
+                rc, lines = self.run_script(tgt, cfg, rules=rules, name="script-%s.sh" % pid)
+                st.update({"last_rc": rc, "last_output": lines})
+                for line in lines[-5:]:
+                    log("redirect script %s: %s", pid, line[:200])
+                if rc != 0:
+                    raise RedirectError("Skript beendet mit Code %d" % rc)
+                detail = "Skript ok"
+            st.update({"last_rules": key, "last_ok": now, "last_error": "", "last_detail": detail})
+            tries.pop(pid, None)
+            self.rt["xset"].add(pid)
+            log("redirect %s %s (%s)", pid, ", ".join(e for e, _ in rules) or "-", detail)
+            res = {"id": pid, "ok": True, "detail": detail}
+        except (RedirectError, SetupError, myaddr.MyaddrError) as err:
+            st["last_error"] = str(err)[:200]
+            tries[pid] = now + RETRY
+            log("redirect %s failed: %s", pid, st["last_error"])
+            self.agent.notify.event("redirect_error", "Redirect fehlgeschlagen", "%s: %s" % (pid, st["last_error"]))
+            res = {"id": pid, "ok": False, "error": st["last_error"]}
+        cur = self.cfg()
+        if any(p["id"] == pid for p in cur.get("providers") or []):
+            xs = dict(cur.get("xstate") or {})
+            xs[pid] = st
+            self.agent.store.update("redirect", {"xstate": xs})
+        res["output"] = st.get("last_output", [])
+        return res
+
+    def _apply_main(self, cfg, tgt, force, now):
+        provider = cfg.get("provider")
+        worker = provider == "cloudflare" and cfg.get("mode") == "roundrobin"
+        multi = provider == "script" or worker
+        rules = json.dumps(self.mappings_multi(cfg, tgt, via="") if multi else self.mappings(cfg, tgt, via=""))
+        # 0.27.13 (owner): set the redirect once after every start, even if the stored target is the same, so
+        # the entry host is surely right after an update or restart (one script run / Cloudflare call)
+        fresh = not self.rt.get("set_since_start")  # a failed run still waits for RETRY
+        if not force and ((not fresh and tgt["url"] == cfg.get("last_target") and rules == cfg.get("last_rules", rules))
+                          or now < self.rt["next_try"]):
+            return {"ok": True, "skipped": "aktuell"}
+        if not self.may_run(provider):
+            # no VPN tunnel: Cloudflare / the script are not contacted; the latest target waits (0.10.1)
+            if self.rt.get("queued") != tgt["url"]:
+                log("redirect to %s queued: no vpn tunnel", tgt["url"])
+            self.rt["queued"] = tgt["url"]
+            return {"ok": False, "queued": tgt["url"],
+                    "skipped": "kein VPN-Tunnel, Ziel %s vorgemerkt" % tgt["url"]}
+        self.rt["queued"] = ""
+        upd = {"last_try": now}
+        try:
+            if worker:
+                cf = cfg.get("cf") or {}
+                kw = {"request": self.request} if self.request else {}
+                detail = cloudflare_worker_apply(cf["token"], cf["zone"], self.mappings_multi(cfg, tgt, via=""),
+                                                 cfg.get("status", 302), device=self.agent.egress_device(), **kw)
+                upd.update({"last_rc": 0, "last_output": [], "cf_worker": True})
+            elif provider == "cloudflare":
+                cf = cfg.get("cf") or {}
+                kw = {"request": self.request} if self.request else {}
+                if cfg.get("cf_worker"):  # back from round robin: the Worker routes go, the rules come back
+                    cloudflare_worker_remove(cf["token"], cf["zone"], device=self.agent.egress_device(), **kw)
+                    upd["cf_worker"] = False
+                detail = "; ".join("%s: %s" % (e, cloudflare_apply(cf["token"], cf["zone"], e, u, cfg.get("status", 302),
+                                                                    device=self.agent.egress_device(), **kw))
+                                   for e, u in self.mappings(cfg, tgt, via=""))
+                upd.update({"last_rc": 0, "last_output": []})
+            else:
+                rc, lines = self.run_script(tgt, cfg)
+                upd.update({"last_rc": rc, "last_output": lines})
+                for line in lines[-5:]:
+                    log("redirect script: %s", line[:200])
+                if rc != 0:
+                    raise RedirectError("Skript beendet mit Code %d" % rc)
+                detail = "Skript ok"
+            upd.update({"last_target": tgt["url"], "last_rules": rules, "last_ok": now, "last_error": "", "last_detail": detail})
+            self.rt["next_try"] = 0
+            self.rt["set_since_start"] = True
+            log("redirect %s -> %s (%s)", cfg.get("entry_host"), tgt["url"], detail)
+            result = {"ok": True, "target": tgt["url"], "detail": detail}
+        except (RedirectError, SetupError, myaddr.MyaddrError) as err:
+            upd["last_error"] = str(err)[:200]
+            self.rt["next_try"] = now + RETRY
+            log("redirect failed: %s", upd["last_error"])
+            self.agent.notify.event("redirect_error", "Redirect fehlgeschlagen", upd["last_error"])
+            result = {"ok": False, "error": upd["last_error"], "rc": upd.get("last_rc")}
+        if self.cfg().get("provider") == provider:
+            self.agent.store.update("redirect", upd)
+        result["output"] = upd.get("last_output", [])
+        return result
 
     def may_run(self, provider):
         """Cloudflare only with a working tunnel (or a LAN test stand-in). The script cannot be bound to an
@@ -766,5 +932,23 @@ class Redirect:
                 "rules": cfg.get("rules") or [], "to": cfg.get("to", ""), "endpoints": self.endpoints(),
                 "active_name": self.active_name(), "profile_names": sorted(self.profile_names()),
                 "mode": cfg.get("mode", "failover"), "rr": self.rr_state(cfg),
-                "mappings": [{"entry": e, "target": u[0], "targets": u}
-                             for e, u in self.mappings_multi(cfg, tgt)] if tgt else []}
+                "providers": [self._provider_status(x, cfg) for x in cfg.get("providers") or []],
+                "mappings": [{"entry": e, "target": u[0], "targets": u, "via": v}
+                             for e, u, v in self.mappings_via(cfg, tgt)] if tgt else []}
+
+    def _provider_status(self, x, cfg):
+        st = (cfg.get("xstate") or {}).get(x["id"]) or {}
+        out = {"id": x["id"], "kind": x["kind"], "last_ok": st.get("last_ok", 0), "last_try": st.get("last_try", 0),
+               "last_error": st.get("last_error", ""), "last_detail": st.get("last_detail", ""),
+               "last_rc": st.get("last_rc"), "last_output": st.get("last_output", [])}
+        if x["kind"] == "cloudflare":
+            out["cf"] = {"zone": x["cf"]["zone"], "token_set": bool(x["cf"].get("token"))}
+        else:
+            out["gen"] = x.get("gen") or {"kind": ""}
+            if not out["gen"].get("kind"):
+                try:
+                    with open(self._p("script-%s.sh" % x["id"]), encoding="utf-8") as fh:
+                        out["script"] = fh.read()
+                except OSError:
+                    out["script"] = ""
+        return out

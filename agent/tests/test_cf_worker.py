@@ -45,6 +45,10 @@ class FakeCf:
         if path == "/zones/%s/rulesets/rs1/rules" % ZONE and method == "POST":
             self.ruleset["rules"].append(dict(body, id="n%d" % len(self.ruleset["rules"])))
             return ok(self.ruleset)
+        if path.startswith("/zones/%s/rulesets/rs1/rules/" % ZONE) and method == "PATCH":
+            rid = path.rsplit("/", 1)[1]
+            self.ruleset["rules"] = [dict(body, id=rid) if r["id"] == rid else r for r in self.ruleset["rules"]]
+            return ok(self.ruleset)
         if path.startswith("/zones/%s/rulesets/rs1/rules/" % ZONE) and method == "DELETE":
             rid = path.rsplit("/", 1)[1]
             self.ruleset["rules"] = [r for r in self.ruleset["rules"] if r["id"] != rid]

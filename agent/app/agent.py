@@ -863,7 +863,7 @@ class Agent:
                 raise SetupError("Kein Ziel eingerichtet (NPM oder Zoraxy).")
             return {"ok": all(r["ok"] for r in res.values()), "results": res}
         if name == "redirect-run":
-            if not self.redirect.cfg().get("provider"):
+            if not self.redirect.cfg().get("provider") and not self.redirect.cfg().get("providers"):
                 raise SetupError("Kein Redirect-Anbieter eingerichtet.")
             self.names.tick(force=True)
             res = self.redirect.apply(force=True)

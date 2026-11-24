@@ -303,6 +303,75 @@ class RedirectAgentTest(unittest.TestCase):
             self.assertFalse(self.r.cfg()["cf_worker"])
             self.assertEqual([r["description"] for r in cf.ruleset["rules"]], ["portnook redirect start.example.ch"])
 
+    def test_further_providers_each_with_their_hosts(self):
+        """0.32.0: every entry host picks its provider; a further Cloudflare and a further script run on their own,
+        and an error at one doesn't stop the others."""
+        from tests.test_cf_worker import BASE, FakeCf
+        cf = FakeCf()
+        self.r.request = cf
+        marker = os.path.join(self.tmp, "rules2")
+        with mock.patch.dict(os.environ, {"PF_CLOUDFLARE_API": BASE}), \
+                mock.patch.object(self.r, "may_run", return_value=True):
+            self.r.set_config({"provider": "script", "entry_host": "start.example.ch", "script": "true\n",
+                               "providers": [{"kind": "cloudflare", "cf": {"zone": ZONE, "token": TOKEN}},
+                                             {"kind": "script", "script": 'printf "%%s" "$PF_RULES" > %s\n' % marker}],
+                               "rules": [{"entry": "cf.example.ch", "sub": "app", "via": "a2"},
+                                         {"entry": "web.example.org", "sub": "", "via": "a3"},
+                                         {"entry": "main2.example.ch", "sub": ""}]})
+            self.assertEqual([x["id"] for x in self.r.cfg()["providers"]], ["a2", "a3"])
+            res = self.r.apply()
+            self.assertTrue(res["ok"], res)
+            self.assertEqual([(x["id"], x["ok"]) for x in res["extra"]], [("a2", True), ("a3", True)])
+            # Cloudflare a2 only got its host
+            self.assertEqual([r["description"] for r in cf.ruleset["rules"]], ["portnook redirect cf.example.ch"])
+            with open(marker) as fh:
+                self.assertEqual(fh.read(), "web.example.org https://familie-muster.myaddr.tools:51234")
+            vias = {m["entry"]: m["via"] for m in self.r.status()["mappings"]}
+            self.assertEqual(vias, {"start.example.ch": "", "main2.example.ch": "", "cf.example.ch": "a2",
+                                    "web.example.org": "a3"})
+            st = {x["id"]: x for x in self.r.status()["providers"]}
+            self.assertTrue(st["a2"]["cf"]["token_set"])
+            self.assertNotIn(TOKEN, json.dumps(self.r.status()))
+            self.assertIn("PF_RULES", st["a3"]["script"])
+            # nothing changed: all skipped
+            res = self.r.apply()
+            self.assertEqual([x.get("skipped") for x in res["extra"]], ["aktuell", "aktuell"])
+            # a failing further provider fails the result but the main one still ran
+            self.r.set_config({"provider": "script", "entry_host": "start.example.ch",
+                               "providers": [{"id": "a2", "kind": "cloudflare", "cf": {"zone": ZONE}},
+                                             {"id": "a3", "kind": "script", "script": "exit 3\n"}],
+                               "rules": [{"entry": "cf.example.ch", "sub": "app", "via": "a2"},
+                                         {"entry": "web.example.org", "sub": "", "via": "a3"}]})
+            res = self.r.apply(force=True)
+            self.assertFalse(res["ok"])
+            self.assertEqual(res["detail"], "Skript ok")
+            self.assertIn("a3", res["error"])
+            self.assertEqual(self.r.status()["providers"][1]["last_rc"], 3)
+            # removed: its script goes, its rules can't point at it any more
+            with self.assertRaises(ValidationError):
+                self.r.set_config({"provider": "script", "entry_host": "start.example.ch", "providers": [],
+                                   "rules": [{"entry": "web.example.org", "sub": "", "via": "a3"}]})
+            self.r.set_config({"provider": "script", "entry_host": "start.example.ch", "providers": [], "rules": []})
+            self.assertFalse(os.path.exists(os.path.join(self.r.dir, "script-a3.sh")))
+
+    def test_further_provider_validation(self):
+        for bad in ([{"kind": "x"}], [{"kind": "cloudflare", "cf": {"zone": ZONE}}],
+                    [{"kind": "cloudflare", "cf": {"zone": "bad zone", "token": TOKEN}}], [{"kind": "script"}],
+                    [{"kind": "script", "script": "true"}] * (redirect.MAX_PROVIDERS + 1)):
+            with self.assertRaises(ValidationError):
+                self.r.set_config({"provider": "script", "entry_host": "start.example.ch", "script": "true\n",
+                                   "providers": bad})
+        # a provider added in the same save is named by its position
+        self.r.set_config({"provider": "script", "entry_host": "start.example.ch", "script": "true\n",
+                           "providers": [{"kind": "script", "script": "true\n"}],
+                           "rules": [{"entry": "web.example.org", "sub": "", "via": "new0"}]})
+        self.assertEqual(self.r.cfg()["rules"][0]["via"], "a2")
+        # *.host with a further Cloudflare only in round robin
+        with self.assertRaises(ValidationError):
+            self.r.set_config({"provider": "script", "entry_host": "start.example.ch", "script": "true\n",
+                               "providers": [{"kind": "cloudflare", "cf": {"zone": ZONE, "token": TOKEN}}],
+                               "rules": [{"entry": "*.example.org", "sub": "*", "via": "a2"}]})
+
     def test_rules_follow_the_active_profile(self):
         """0.23.1: after a failover every rule uses the active profile's name (its port is the active one)."""
         self.store.update("myaddr", {"profile": "p1"})

@@ -1,6 +1,6 @@
 # Redirect host
 
-> **Applies to:** portnook 0.31 (rc1) · [Versions](Versions)
+> **Applies to:** portnook 0.32 (rc1) · [Versions](Versions)
 
 The VPN port changes now and then, and a URL with a port is hard to remember. A **redirect host** is a fixed
 address, e.g. `https://start.example.com`, that answers with a **302** to the current
@@ -54,6 +54,25 @@ again.
 | `*.media.example.com` | `*` | `x.media.example.com` → `https://x.<name>.myaddr.tools:<port>` |
 
 `*.` rules work with the script, and with Cloudflare only in round robin (Worker). The entry host itself needs a certificate (wildcard for `*.` rules).
+
+## Further providers (0.32)
+
+Each start address can use its own provider. Card **Further providers** → **Add provider**: Cloudflare (zone and
+token, e.g. a second account), `.htaccess` or `index.php` via SSH (another web hosting), or your own script.
+In **More rules** the column **Via** picks the provider per entry host; the main entry always goes via the
+provider at the top (provider 1).
+
+| Entry | Via | Example |
+|---|---|---|
+| `start.example.com` (main) | Provider 1: Cloudflare | redirect rule in the zone `example.com` |
+| `start.example.org` | Provider 2: `.htaccess` via SSH | file on another web hosting |
+| `media.example.net` | Provider 3: Cloudflare | second Cloudflare account |
+
+- Each provider runs on its own with its own state and retry; if one fails, the others are still updated. The
+  overview shows each one.
+- All scripts use the same SSH key (card **Script**); add its public key at every hosting.
+- In round robin a further Cloudflare provider gets its own Worker `portnook-redirect-<id>`, so two in one
+  account don't overwrite each other.
 
 ## Apps
 
