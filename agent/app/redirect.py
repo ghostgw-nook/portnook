@@ -201,14 +201,19 @@ def _cf(request, method, url, token, device, body=None, ok404=False):
     return data.get("result")
 
 
+def _zone_id(request, base, token, zone, device):
+    if _ZONE_ID.fullmatch(zone):
+        return zone
+    zones = _cf(request, "GET", base + "/zones?" + urllib.parse.urlencode({"name": zone}), token, device)
+    if not zones:
+        raise RedirectError("Cloudflare: Zone %s nicht gefunden (oder Zone-ID eintragen)." % zone)
+    return zones[0]["id"]
+
+
 def cloudflare_apply(token, zone, entry_host, target_base, status, device=None, request=httpc.request):
     """Create or update the agent's redirect rule. Returns a short description."""
     base = cf_base()
-    if not _ZONE_ID.fullmatch(zone):
-        zones = _cf(request, "GET", base + "/zones?" + urllib.parse.urlencode({"name": zone}), token, device)
-        if not zones:
-            raise RedirectError("Cloudflare: Zone %s nicht gefunden (oder Zone-ID eintragen)." % zone)
-        zone = zones[0]["id"]
+    zone = _zone_id(request, base, token, zone, device)
     entry = "%s/zones/%s/rulesets/phases/%s/entrypoint" % (base, zone, PHASE)
     rule = cf_rule(entry_host, target_base, status)
     ruleset = _cf(request, "GET", entry, token, device, ok404=True)
@@ -225,6 +230,115 @@ def cloudflare_apply(token, zone, entry_host, target_base, status, device=None, 
         return "Regel aktualisiert"
     _cf(request, "POST", "%s/zones/%s/rulesets/%s/rules" % (base, zone, rid), token, device, body=rule)
     return "Regel angelegt"
+
+
+# -- Cloudflare Worker (0.31.0, round robin) ------------------------------
+WORKER_NAME = "portnook-redirect"
+WORKER_DATE = "2024-09-23"
+
+
+def _js_re(entry):
+    """Host pattern for the Worker (``URL.hostname`` has no port); ``*.host`` captures one label."""
+    if entry.startswith("*."):
+        return r"^([a-z0-9-]+)\." + re.escape(entry[2:]).replace(r"\-", "-") + "$"
+    return "^" + re.escape(entry).replace(r"\-", "-") + "$"
+
+
+def worker_js(rules, status):
+    """Worker module for all rules. Like ``index.php``: several targets are shared by a hash of the client
+    address (``CF-Connecting-IP``), so one client always gets the same tunnel; ``*`` in a target is the label
+    caught by ``*.host``. Path and query string are kept; other hosts pass through unchanged."""
+    table = json.dumps([[_js_re(e), _urls(u)] for e, u in rules], indent=1)
+    return ("// managed by portnook, do not edit\n"
+            "const RULES = %s;\n"
+            "const STATUS = %d;\n"
+            "function pick(n, ip) {\n"
+            "  let h = 0;\n"
+            "  for (let i = 0; i < ip.length; i++) h = (h * 31 + ip.charCodeAt(i)) >>> 0;\n"
+            "  return h %% n;\n"
+            "}\n"
+            "export default {\n"
+            "  async fetch(request) {\n"
+            "    const url = new URL(request.url);\n"
+            "    const host = url.hostname.toLowerCase();\n"
+            "    for (const [re, targets] of RULES) {\n"
+            "      const m = new RegExp(re).exec(host);\n"
+            "      if (!m) continue;\n"
+            "      let t = targets[targets.length > 1 ? pick(targets.length, request.headers.get('CF-Connecting-IP') || '') : 0];\n"
+            "      if (m[1] !== undefined) t = t.replace('*', m[1]);\n"
+            "      return new Response(null, {status: STATUS, headers: {\n"
+            "        'Location': t + url.pathname + url.search,\n"
+            "        'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0'}});\n"
+            "    }\n"
+            "    return fetch(request);\n"
+            "  },\n"
+            "};\n" % (table, int(status)))
+
+
+def _multipart(js):
+    boundary = "portnook" + "".join("%02x" % b for b in os.urandom(8))
+    meta = json.dumps({"main_module": "worker.js", "compatibility_date": WORKER_DATE})
+    body = ("--{b}\r\nContent-Disposition: form-data; name=\"metadata\"\r\nContent-Type: application/json\r\n\r\n{m}\r\n"
+            "--{b}\r\nContent-Disposition: form-data; name=\"worker.js\"; filename=\"worker.js\"\r\n"
+            "Content-Type: application/javascript+module\r\n\r\n{js}\r\n--{b}--\r\n").format(b=boundary, m=meta, js=js)
+    return body.encode("utf-8"), "multipart/form-data; boundary=" + boundary
+
+
+def _own_rules(request, base, token, zone, device):
+    """Redirect rules of portnook in the zone: ``(ruleset id, [rule])``."""
+    rs = _cf(request, "GET", "%s/zones/%s/rulesets/phases/%s/entrypoint" % (base, zone, PHASE), token, device,
+             ok404=True)
+    if not rs:
+        return None, []
+    return rs.get("id"), [r for r in rs.get("rules") or []
+                          if str(r.get("description", "")).startswith(("portnook redirect ", LEGACY_RULE_PREFIX))]
+
+
+def cloudflare_worker_apply(token, zone, rules, status, device=None, request=httpc.request):
+    """Upload the Worker and point one route per entry host (``host/*``) at it. Redirect rules of portnook are
+    removed, as Cloudflare runs them before any Worker; routes of other Workers are left alone."""
+    base = cf_base()
+    zone = _zone_id(request, base, token, zone, device)
+    info = _cf(request, "GET", "%s/zones/%s" % (base, zone), token, device) or {}
+    account = (info.get("account") or {}).get("id")
+    if not account:
+        raise RedirectError("Cloudflare: Konto der Zone unbekannt.")
+    body, ctype = _multipart(worker_js(rules, status))
+    try:
+        resp = request("PUT", "%s/accounts/%s/workers/scripts/%s" % (base, account, WORKER_NAME), body=body,
+                       device=device, timeout=30, headers={"Authorization": "Bearer " + token,
+                                                           "Accept": "application/json", "Content-Type": ctype})
+    except httpc.HttpError as err:
+        raise RedirectError("Cloudflare: %s" % err)
+    data = resp.json()
+    if resp.status >= 400 or not isinstance(data, dict) or data.get("success") is False:
+        raise RedirectError("Cloudflare Worker HTTP %d (Token braucht Workers Scripts: Edit)" % resp.status)
+    wanted = [e + "/*" for e, _ in rules]
+    routes = _cf(request, "GET", "%s/zones/%s/workers/routes" % (base, zone), token, device) or []
+    have = {r.get("pattern"): r for r in routes}
+    for pat in wanted:
+        r = have.get(pat)
+        if r is None:
+            _cf(request, "POST", "%s/zones/%s/workers/routes" % (base, zone), token, device,
+                body={"pattern": pat, "script": WORKER_NAME})
+        elif r.get("script") != WORKER_NAME:
+            raise RedirectError("Cloudflare: Route %s gehört zu einem anderen Worker." % pat)
+    gone = [r for r in routes if r.get("script") == WORKER_NAME and r.get("pattern") not in wanted]
+    for r in gone:
+        _cf(request, "DELETE", "%s/zones/%s/workers/routes/%s" % (base, zone, r["id"]), token, device)
+    rid, own = _own_rules(request, base, token, zone, device)
+    for r in own:
+        _cf(request, "DELETE", "%s/zones/%s/rulesets/%s/rules/%s" % (base, zone, rid, r["id"]), token, device)
+    return "Worker aktualisiert, %d Route(n)" % len(wanted)
+
+
+def cloudflare_worker_remove(token, zone, device=None, request=httpc.request):
+    """Back to redirect rules: remove the routes of the portnook Worker (the script itself stays, unused)."""
+    base = cf_base()
+    zone = _zone_id(request, base, token, zone, device)
+    for r in _cf(request, "GET", "%s/zones/%s/workers/routes" % (base, zone), token, device) or []:
+        if r.get("script") == WORKER_NAME:
+            _cf(request, "DELETE", "%s/zones/%s/workers/routes/%s" % (base, zone, r["id"]), token, device)
 
 
 class Redirect:
@@ -319,10 +433,7 @@ class Redirect:
         mode = str(body.get("mode") or cur.get("mode") or "failover")
         if mode not in ("failover", "roundrobin"):
             raise ValidationError("Modus: failover oder roundrobin.")
-        if mode == "roundrobin" and provider != "script":
-            raise ValidationError("Clients verteilen (Round Robin) geht nur mit Skript (.htaccess oder index.php), "
-                                  "nicht mit Cloudflare.")
-        new["mode"] = mode
+        new["mode"] = mode  # 0.31.0: round robin with Cloudflare runs as a Worker
         try:
             new["status"] = int(body.get("status") or 302)
         except (TypeError, ValueError):
@@ -360,10 +471,10 @@ class Redirect:
             self._write("script.sh", text, 0o700)
         if provider == "script" and not os.path.exists(self._p("script.sh")):
             raise ValidationError("Bitte ein Skript eintragen.")
-        new["rules"] = self._rules(body.get("rules", cur.get("rules") or []), provider)
+        new["rules"] = self._rules(body.get("rules", cur.get("rules") or []), provider, mode)
         for r in new["rules"]:
             r["to"] = self._to(r.get("to"))
-        for k in ("last_target", "last_ok", "last_try", "last_error", "last_detail", "last_rc", "last_output"):
+        for k in ("cf_worker", "last_target", "last_ok", "last_try", "last_error", "last_detail", "last_rc", "last_output"):
             if k in cur:
                 new[k] = cur[k]
         new["last_target"] = ""  # run once after saving
@@ -374,7 +485,7 @@ class Redirect:
         return {"ok": True}
 
     @staticmethod
-    def _rules(rows, provider):  # "to" is checked by set_config
+    def _rules(rows, provider, mode="failover"):  # "to" is checked by set_config
         """More entry hosts: ``{"entry": "eingang-muster.myaddr.io" or "*.eingang-muster.myaddr.io", "sub": "tv" / "" / "*"}``."""
         if not isinstance(rows, list) or len(rows) > MAX_RULES:
             raise ValidationError("Höchstens %d weitere Regeln." % MAX_RULES)
@@ -393,8 +504,8 @@ class Redirect:
                 raise ValidationError("Ziel * (gleiche Subdomain) nur mit Eingang *.host.")
             if sub not in ("", "*") and not _SUB.fullmatch(sub):
                 raise ValidationError("Ziel-Subdomain %s: nur a-z, 0-9 und '-'." % sub)
-            if wild and provider == "cloudflare":
-                raise ValidationError("Cloudflare: nur feste Eingangs-Hosts, *.host nur mit Skript.")
+            if wild and provider == "cloudflare" and mode != "roundrobin":
+                raise ValidationError("Cloudflare: *.host nur mit Skript oder im Modus Round Robin (Worker).")
             out.append({"entry": entry, "sub": sub, "to": row.get("to")})
         return out
 
@@ -569,7 +680,9 @@ class Redirect:
             if not tgt:
                 return {"ok": False, "skipped": "Ziel unbekannt (Port, Name oder IP fehlt)"}
             now = int(self.clock())
-            rules = json.dumps(self.mappings_multi(cfg, tgt) if provider == "script" else self.mappings(cfg, tgt))
+            worker = provider == "cloudflare" and cfg.get("mode") == "roundrobin"
+            multi = provider == "script" or worker
+            rules = json.dumps(self.mappings_multi(cfg, tgt) if multi else self.mappings(cfg, tgt))
             # 0.27.13 (owner): set the redirect once after every start, even if the stored target is the same, so
             # the entry host is surely right after an update or restart (one script run / Cloudflare call)
             fresh = not self.rt.get("set_since_start")  # a failed run still waits for RETRY
@@ -586,9 +699,18 @@ class Redirect:
             self.rt["queued"] = ""
             upd = {"last_try": now}
             try:
-                if provider == "cloudflare":
+                if worker:
                     cf = cfg.get("cf") or {}
                     kw = {"request": self.request} if self.request else {}
+                    detail = cloudflare_worker_apply(cf["token"], cf["zone"], self.mappings_multi(cfg, tgt),
+                                                     cfg.get("status", 302), device=self.agent.egress_device(), **kw)
+                    upd.update({"last_rc": 0, "last_output": [], "cf_worker": True})
+                elif provider == "cloudflare":
+                    cf = cfg.get("cf") or {}
+                    kw = {"request": self.request} if self.request else {}
+                    if cfg.get("cf_worker"):  # back from round robin: the Worker routes go, the rules come back
+                        cloudflare_worker_remove(cf["token"], cf["zone"], device=self.agent.egress_device(), **kw)
+                        upd["cf_worker"] = False
                     detail = "; ".join("%s: %s" % (e, cloudflare_apply(cf["token"], cf["zone"], e, u, cfg.get("status", 302),
                                                                         device=self.agent.egress_device(), **kw))
                                        for e, u in self.mappings(cfg, tgt))

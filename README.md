@@ -79,7 +79,8 @@ und das Log. Dazu Knöpfe für Proton neu verbinden, NAT-PMP erneuern, Backend t
 
 Der Proton-Port ändert sich ab und zu. Eine feste Adresse wie `https://start.example.ch` leitet deshalb mit 302 auf
 das aktuelle Ziel weiter und wird bei jeder Port-Änderung nachgeführt: über eine **Cloudflare**-Regel oder ein
-eigenes **Skript** (Beispiel: `.htaccess` per SSH auf ein Plesk-Webhosting). Weitere Regeln leiten zusätzliche
+eigenes **Skript** (Beispiel: `.htaccess` per SSH auf ein Plesk-Webhosting). Im Modus Round Robin verteilt der
+Redirect die Clients auf aktiven und Reserve-Tunnel; mit Cloudflare legt portnook dafür einen Worker an. Weitere Regeln leiten zusätzliche
 Eingangs-Hosts weiter, auch `*.eingang` auf `*.<name>.myaddr.tools` (Subdomain auf Subdomain). Alle myaddr-Namen stehen
 auf der Seite **Namen** in einer Liste; pro Name legt die Spalte «Verwendung» fest, wofür er da ist (
 Eingang oder Endpunkt). Das Zertifikat deckt alle Namen mit Schlüssel ab.

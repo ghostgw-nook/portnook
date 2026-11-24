@@ -1,6 +1,6 @@
 # Redirect host
 
-> **Applies to:** portnook 0.27 (rc1) · [Versions](Versions)
+> **Applies to:** portnook 0.31 (rc1) · [Versions](Versions)
 
 The VPN port changes now and then, and a URL with a port is hard to remember. A **redirect host** is a fixed
 address, e.g. `https://start.example.com`, that answers with a **302** to the current
@@ -20,6 +20,23 @@ Page **Redirect**. Two providers:
 3. In portnook: provider Cloudflare, entry host, target subname (e.g. `app`), zone and token, **Save and
    run**. portnook creates one rule "portnook redirect start.example.com" and only updates that one.
 
+## Round robin (share clients between both tunnels)
+
+**Redirect** → **Mode** → **Share clients (round robin)**: the clients are spread by their IP over the active and
+the standby tunnel; one client always gets the same tunnel. Each tunnel needs its own connection name (see
+[VPN profiles and failover](VPN-profiles-and-failover)); if the standby fails, it is taken out until it is ready
+again.
+
+- **Script:** the `.htaccess` / `index.php` gets one target per tunnel.
+- **Cloudflare (0.31):** a redirect rule has only one target, so portnook uploads a **Worker** named
+  `portnook-redirect` instead and adds one **route** per entry host (`start.example.com/*`, also `*.host/*`). It
+  removes its own redirect rules, as Cloudflare would run them before the Worker. Routes of other Workers are left
+  alone; a route on the same host that belongs to another Worker is reported as an error.
+  The token needs in addition **Zone → Zone → Read**, **Zone → Workers Routes → Edit** and
+  **Account → Workers Scripts → Edit**. The free Workers plan is enough for home use (100 000 requests a day).
+- Back to **Only active tunnel (failover)**: portnook removes its Worker routes and sets the redirect rule again.
+  The Worker script itself stays in your account, unused; delete it there if you like.
+
 ## Script (e.g. web hosting via SSH)
 
 1. Provider **Script**, where to write: ".htaccess via SSH" (or "index.php via SSH"), SSH user, host, port and web
@@ -36,7 +53,7 @@ Page **Redirect**. Two providers:
 | `media.example.com` | `tv` | `https://tv.<name>.myaddr.tools:<port>` |
 | `*.media.example.com` | `*` | `x.media.example.com` → `https://x.<name>.myaddr.tools:<port>` |
 
-`*.` rules work only with the script. The entry host itself needs a certificate (wildcard for `*.` rules).
+`*.` rules work with the script, and with Cloudflare only in round robin (Worker). The entry host itself needs a certificate (wildcard for `*.` rules).
 
 ## Apps
 

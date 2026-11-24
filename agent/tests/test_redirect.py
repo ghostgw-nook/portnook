@@ -276,6 +276,33 @@ class RedirectAgentTest(unittest.TestCase):
                                "cf": {"zone": "example.ch", "token": "T" * 40},
                                "rules": [{"entry": "*.eingang-muster.myaddr.io", "sub": "*"}]})
 
+    def test_cloudflare_round_robin_uses_a_worker_and_back(self):
+        """0.31.0: round robin with Cloudflare deploys the Worker; back to failover, its routes go and the rule
+        comes back."""
+        from tests.test_cf_worker import BASE, FakeCf
+        cf = FakeCf()
+        self.r.request = cf
+        with mock.patch.dict(os.environ, {"PF_CLOUDFLARE_API": BASE}), \
+                mock.patch.object(self.r, "may_run", return_value=True):
+            self.r.set_config({"provider": "cloudflare", "entry_host": "start.example.ch", "mode": "roundrobin",
+                               "cf": {"zone": ZONE, "token": TOKEN},
+                               "rules": [{"entry": "*.eingang-muster.myaddr.io", "sub": "*"}]})
+            res = self.r.apply()
+            self.assertTrue(res["ok"], res)
+            self.assertEqual(res["detail"], "Worker aktualisiert, 2 Route(n)")
+            self.assertTrue(self.r.cfg()["cf_worker"])
+            self.assertIn("https://familie-muster.myaddr.tools:51234", cf.script[0].decode())
+            self.assertEqual(sorted(r["pattern"] for r in cf.routes),
+                             ["*.eingang-muster.myaddr.io/*", "start.example.ch/*"])
+            self.r.set_config({"provider": "cloudflare", "entry_host": "start.example.ch", "mode": "failover",
+                               "cf": {"zone": ZONE}, "rules": []})
+            self.assertTrue(self.r.cfg()["cf_worker"])  # kept until the routes are gone
+            res = self.r.apply()
+            self.assertTrue(res["ok"], res)
+            self.assertEqual(cf.routes, [])
+            self.assertFalse(self.r.cfg()["cf_worker"])
+            self.assertEqual([r["description"] for r in cf.ruleset["rules"]], ["portnook redirect start.example.ch"])
+
     def test_rules_follow_the_active_profile(self):
         """0.23.1: after a failover every rule uses the active profile's name (its port is the active one)."""
         self.store.update("myaddr", {"profile": "p1"})
