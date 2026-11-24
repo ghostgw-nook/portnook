@@ -1464,7 +1464,16 @@ function toggleGen(preview) {
   $("g-prev-label").textContent = tx(gen ? "gen.vorschau" : "gen.skript");
   if (gen && preview) genPreview();
 }
-$("g-kind").addEventListener("change", () => toggleGen(true));
+let genWas = "";
+$("g-kind").addEventListener("focus", () => { genWas = $("g-kind").value; });
+$("g-kind").addEventListener("change", async () => {
+  // 0.38.0 (owner): to "own script": the generated script of the kind before is copied in to be edited
+  if (!$("g-kind").value && genWas && $("g-user").value.trim() && $("g-host").value.trim()) {
+    try { $("r-text").value = (await api("POST", "/api/redirect/preview", Object.assign(genOf(), { kind: genWas }))).script; } catch (e) {}
+  }
+  genWas = $("g-kind").value;
+  toggleGen(true);
+});
 ["g-user", "g-host", "g-port", "g-root"].forEach((id) => $(id).addEventListener("input", () => {
   clearTimeout(genTimer); genTimer = setTimeout(genPreview, 400);
 }));
@@ -1665,7 +1674,20 @@ function provFields(p) {
     w.querySelector(".xp-own").classList.toggle("hidden", a !== "own");
     w.querySelector(".xp-hint").textContent = tx(a === "cloudflare" ? "redirect.token_mit_der_berechtigung_zone" : a === "own" ? "redirect.lauft_mit_bin_sh_60" : "gen.hinweis");
   };
-  w.querySelector(".xp-art").addEventListener("change", toggle);
+  // 0.38.0 (owner): from .htaccess/PHP to "own script" the generated script is copied in to be edited
+  let was = art;
+  w.querySelector(".xp-art").addEventListener("change", async () => {
+    const a = w.querySelector(".xp-art").value, text = w.querySelector(".xp-text");
+    toggle();
+    if (a === "own" && (was === "htaccess" || was === "php") && !text.value.trim()) {
+      const gen = { kind: was, user: w.querySelector(".xp-user").value.trim(), host: w.querySelector(".xp-host").value.trim(),
+        port: w.querySelector(".xp-port").value.trim() || 22, root: w.querySelector(".xp-root").value.trim() };
+      if (gen.user && gen.host) {
+        try { text.value = (await api("POST", "/api/redirect/preview", gen)).script; groupsChanged(); } catch (e) {}
+      }
+    }
+    was = a;
+  });
   toggle();
   return w;
 }
@@ -1811,7 +1833,8 @@ function addName(n) {
     '<td><details class="mn-profile"><summary></summary><div class="mn-prof-list">' +
     (S.profiles || []).map((x) => '<label><input type="checkbox" value="' + esc(x.id) + '"> ' + esc(x.name) + "</label>").join("") +
     "</div></details></td>" +
-    '<td><input type="password" class="mn-key" autocomplete="off" placeholder="' + esc(n && n.key_set ? tx("js.gespeichert") : "") + '"></td>' +
+    '<td><input type="password" class="mn-key" autocomplete="off" placeholder="' + esc(n && n.key_set ? tx("js.gespeichert") : "") + '">' +
+    (n && n.key_set && n.id ? '<div class="mn-reveal"><button type="button" class="small mn-show">' + esc(tx("js.schlussel_anzeigen")) + "</button></div>" : "") + "</td>" +
     '<td><input type="checkbox" class="mn-cert"></td>' +
     '<td class="small mn-state">' + esc(nameState(n)) + "</td><td>" + delBtn() + "</td>";
   tr.querySelector(".mn-name").value = (n && n.name) || ""; tr.querySelector(".mn-domain").value = (n && n.domain) || "myaddr.tools";
@@ -1825,6 +1848,34 @@ function addName(n) {
   role.addEventListener("change", () => { sync(); markBase(); });
   prof.addEventListener("change", markBase);
   sync();
+  // 0.38.0 (owner): one key per name: a row of a name that has a key elsewhere needs none
+  const keyHint = () => {
+    const nm = tr.querySelector(".mn-name").value.trim().toLowerCase(), k = tr.querySelector(".mn-key");
+    if (n && n.key_set) return;
+    const other = [...document.querySelectorAll("#mn-rows tr")].some((o) => o !== tr &&
+      o.querySelector(".mn-name").value.trim().toLowerCase() === nm && (o.querySelector(".mn-key").value.trim() || o.dataset.keySet));
+    k.placeholder = nm && other ? tx("js.schlussel_vom_namen") : "";
+  };
+  tr.dataset.keySet = n && n.key_set ? "1" : "";
+  tr.querySelector(".mn-name").addEventListener("input", keyHint);
+  setTimeout(keyHint, 0);
+  // 0.38.0 (owner): show the stored key after the password was typed again
+  const show = tr.querySelector(".mn-show");
+  if (show) show.addEventListener("click", () => {
+    const box = tr.querySelector(".mn-reveal");
+    box.innerHTML = '<input type="password" class="mn-pw" autocomplete="current-password" placeholder="' + esc(tx("js.passwort_erneut")) +
+      '"><button type="button" class="small mn-pw-ok">' + "OK</button><div class=\"small mn-pw-msg\"></div>";
+    const pw = box.querySelector(".mn-pw"), ok = box.querySelector(".mn-pw-ok");
+    const go = async () => {
+      try {
+        const r = await api("POST", "/api/myaddr/key", { id: tr.dataset.id, password: pw.value });
+        const k = tr.querySelector(".mn-key"); k.type = "text"; k.value = r.key; box.innerHTML = "";
+      } catch (e) { box.querySelector(".mn-pw-msg").textContent = e.message; pw.value = ""; pw.focus(); }
+    };
+    ok.addEventListener("click", go);
+    pw.addEventListener("keydown", (ev) => { if (ev.key === "Enter") { ev.preventDefault(); go(); } });
+    pw.focus();
+  });
   $("mn-rows").appendChild(tr);
 }
 $("mn-add").addEventListener("click", () => { addName(); markBase(); });

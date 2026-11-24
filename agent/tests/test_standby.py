@@ -398,11 +398,11 @@ class StandbyFlowTest(unittest.TestCase):
         self.assertEqual(self.agent.ddns.resolve()[0], EXIT["p2"])
         self.assertEqual(self.agent.names.for_profile("p2"), "familie-muster.myaddr.tools")
         self.assertEqual(self.agent.names.for_profile("p1"), "muster-de.myaddr.tools")
-        from app.validate import ValidationError
-        with self.assertRaises(ValidationError):  # one name per profile
-            self.agent.names.save_all({"names": [
-                {"id": "main", "name": "familie-muster", "domain": "myaddr.tools", "role": "endpoint", "profile": "p1"},
-                {"name": "muster-de", "domain": "myaddr.tools", "role": "endpoint", "profile": "p1"}]})
+        # 0.38.0: a row without id and key takes the stored key of the same name (one key per name)
+        self.agent.names.save_all({"names": [
+            {"id": "main", "name": "familie-muster", "domain": "myaddr.tools", "role": "endpoint", "profile": "p1"},
+            {"name": "muster-de", "domain": "myaddr.tools", "role": "endpoint", "profile": "p1"}]})
+        self.assertEqual([n["key"] for n in self.agent.names.items()], ["B" * 43])
 
     def test_standby_off(self):
         self.apply()

@@ -496,6 +496,29 @@ class RedirectAgentTest(unittest.TestCase):
             with self.assertRaises(ValidationError):
                 names.save(bad)
 
+    def test_one_key_per_name_on_every_domain(self):
+        """0.38.0 (owner): the myaddr key belongs to the name; .io, .tools and .dev share it."""
+        names = self.agent.names
+        names.save({"names": [{"name": "familie-tv", "domain": "myaddr.io", "key": "B" * 43, "ip": "1.2.3.70",
+                               "role": "entry"},
+                              {"name": "familie-tv", "domain": "myaddr.dev", "ip": "1.2.3.70", "role": "entry"}]})
+        self.assertEqual([n["key"] for n in names.items()], ["B" * 43] * 2)
+        n1 = names.items()[0]["id"]
+        # another domain without typing the key again
+        names.save({"names": [{"id": n1, "name": "familie-tv", "domain": "myaddr.tools", "ip": "1.2.3.70", "role": "entry"}]})
+        self.assertEqual(names.items()[0]["key"], "B" * 43)
+        # the main name's key serves the same name on another domain
+        names.save({"names": [{"name": self.store.section("myaddr")["name"], "domain": "myaddr.dev", "ip": "1.2.3.71",
+                               "role": "entry"}]})
+        self.assertEqual(names.items()[0]["key"], self.store.section("myaddr")["key"])
+        # a new key typed once goes to every row of that name
+        names.save({"names": [{"name": "familie-tv", "domain": "myaddr.io", "key": "C" * 43, "ip": "1.2.3.70", "role": "entry"},
+                              {"name": "familie-tv", "domain": "myaddr.dev", "ip": "1.2.3.70", "role": "entry"}]})
+        self.assertEqual([n["key"] for n in names.items()], ["C" * 43] * 2)
+        self.assertEqual(names.key_of(names.items()[1]["id"]), ("familie-tv.myaddr.dev", "C" * 43))
+        with self.assertRaises(KeyError):
+            names.key_of("n99")
+
 
 @unittest.skipUnless(shutil.which("ssh-keygen"), "ssh-keygen missing")
 class SshKeyTest(unittest.TestCase):

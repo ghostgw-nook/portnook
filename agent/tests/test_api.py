@@ -179,6 +179,20 @@ class ApiTest(unittest.TestCase):
         self.assertNotIn(MYKEY, json.dumps(st))
         self.assertNotIn(MYKEY, json.dumps(self.req("GET", "/api/logs")[1]))
 
+    def test_myaddr_key_shown_after_password(self):
+        """0.38.0 (owner): the key is shown only with the password typed again; failures count like logins."""
+        self.setup_password()
+        self.req("POST", "/api/myaddr", {"name": "familie-muster", "domain": "myaddr.io", "key": MYKEY, "ddns": True})
+        self.assertEqual(self.req("POST", "/api/myaddr/key", {"id": "main", "password": "falsch"})[0], 401)
+        status, data, _ = self.req("POST", "/api/myaddr/key", {"id": "main", "password": "geheim123"})
+        self.assertEqual((status, data["key"], data["name"]), (200, MYKEY, "familie-muster.myaddr.io"))
+        self.assertEqual(self.req("POST", "/api/myaddr/key", {"id": "n9", "password": "geheim123"})[0], 404)
+        self.assertEqual(self.req("POST", "/api/myaddr/key", {"id": "main", "password": "geheim123"}, cookie="")[0], 401)
+        self.assertNotIn(MYKEY, json.dumps(self.req("GET", "/api/logs")[1]))
+        for _ in range(5):
+            self.req("POST", "/api/myaddr/key", {"id": "main", "password": "falsch"})
+        self.assertEqual(self.req("POST", "/api/myaddr/key", {"id": "main", "password": "geheim123"})[0], 429)
+
     def test_cert_download_and_pull_token(self):
         self.setup_password()
         self.assertEqual(self.req("GET", "/api/cert/download/fullchain.pem")[0], 409)  # no cert yet

@@ -298,6 +298,11 @@ class Names:
         if not isinstance(rows, list) or len(rows) > MAX_NAMES:
             raise ValidationError("Höchstens %d weitere Namen." % MAX_NAMES)
         cur = {n["id"]: n for n in self.items()}
+        # 0.38.0 (owner): one myaddr key per name, the same for myaddr.io, .tools and .dev
+        keys = self.keys_by_name()
+        for row in rows:
+            if isinstance(row, dict) and row.get("key"):
+                keys[str(row.get("name") or "").strip().lower()] = check_key(row["key"])
         out, seen = [], set()
         for row in rows:
             if not isinstance(row, dict):
@@ -327,7 +332,9 @@ class Names:
                     n["host"] = value
             if row.get("key"):
                 n["key"] = check_key(row["key"])
-            elif old.get("key") and (old.get("name"), old.get("domain")) == (name, domain):
+            elif keys.get(name):
+                n["key"] = keys[name]  # same name on another domain or row: same key
+            elif old.get("key") and old.get("name") == name:
                 n["key"] = old["key"]
             else:
                 raise ValidationError("Schlüssel für %s.%s fehlt." % (name, domain))
@@ -339,6 +346,29 @@ class Names:
         log("myaddr names: %s", ", ".join("%s.%s (%s)" % (n["name"], n["domain"], n["role"]) for n in out) or "none")
         self.agent.trigger_check()
         return {"ok": True}
+
+    def keys_by_name(self):
+        """0.38.0: ``{name: key}`` of every stored name (main and extra), whatever its domain."""
+        out = {}
+        m = self.agent.store.section("myaddr")
+        if m.get("name") and m.get("key"):
+            out[m["name"]] = m["key"]
+        for n in self.items():
+            if n.get("key"):
+                out.setdefault(n["name"], n["key"])
+        return out
+
+    def key_of(self, nid):
+        """0.38.0 (owner): the stored key of the name ``nid`` (``main`` = the base name), for the UI after the
+        password was asked again. ``KeyError`` if there is none."""
+        if nid == "main":
+            m = self.agent.store.section("myaddr")
+            if m.get("key"):
+                return "%s.%s" % (m["name"], m.get("domain")), m["key"]
+        for n in self.items():
+            if n["id"] == nid and n.get("key"):
+                return "%s.%s" % (n["name"], n["domain"]), n["key"]
+        raise KeyError(nid)
 
     def save_all(self, body):
         """0.20.0, owner: all myaddr names in one list, each row says what it is for (entry or connection).
@@ -364,9 +394,14 @@ class Names:
         if m.get("name"):
             cur["main"] = {"id": "main", "name": m["name"], "domain": m.get("domain"), "key": m.get("key", "")}
 
+        keys = self.keys_by_name()  # 0.38.0: one key per name, whatever the domain
+        for r in rows:
+            if isinstance(r, dict) and r.get("key"):
+                keys[str(r.get("name") or "").strip().lower()] = check_key(r["key"])
+
         def stored_key(row, name, domain):
             old = cur.get(str(row.get("id") or ""), {})
-            return old.get("key") if (old.get("name"), old.get("domain")) == (name, domain) else ""
+            return keys.get(name) or (old.get("key") if old.get("name") == name else "")
 
         main = mains[0]
         name, domain = check_name(main.get("name"), main.get("domain"))

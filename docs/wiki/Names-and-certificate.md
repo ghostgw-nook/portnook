@@ -1,12 +1,16 @@
 # Names and certificate
 
-> **Applies to:** portnook 0.35 (rc1) · [Versions](Versions)
+> **Applies to:** portnook 0.38 (rc1) · [Versions](Versions)
 
 ## myaddr.tools name
 
 1. At [myaddr.tools](https://myaddr.tools) reserve a name (e.g. `family-example`) and keep the key.
 2. In portnook, page **Names**: name, domain (`myaddr.tools`, `myaddr.dev` or `myaddr.io`), use and key,
-   **Save**. The key is stored with mode 600 and never shown again.
+   **Save**. The key is stored with mode 600.
+   - One key per name (0.38): the same name on `myaddr.io`, `.tools` and `.dev` uses one key. Type it in one
+     row; the other rows of that name take it, also after a change of the domain.
+   - **Show** next to a stored key asks for the portnook password again and then shows the key in the field.
+     Wrong passwords count like failed logins (5 in 10 minutes lock it); the key never goes into the log.
 
 **IP for the A record:** by default the **VPN exit IP**, on every change and at least every 30 days (myaddr
 disables records after 90 days without an update and deletes names after 120). Optional:

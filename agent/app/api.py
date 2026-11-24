@@ -258,6 +258,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self._send(200, self.agent.names.save_all(body))
             if path == "/api/myaddr/names":
                 return self._send(200, self.agent.names.save(body))
+            if path == "/api/myaddr/key":
+                return self._reveal_key(body)
             if path == "/api/myaddr":
                 return self._send(200, self.agent.certs.set_myaddr(body))
             if path == "/api/cert/settings":
@@ -356,6 +358,24 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.server.sessions.drop_all()
         token = self.server.sessions.create()
         self._send(200, {"ok": True}, headers=self._set_cookie(token))
+
+    def _reveal_key(self, body):
+        """0.38.0 (owner): show a stored myaddr key, only after the UI password was typed again. Failures count
+        like failed logins (same lockout); the key itself is never logged."""
+        ip = self.client_ip
+        if self.server.sessions.blocked(ip):
+            raise HTTPError(429, "Zu viele Fehlversuche. Bitte 10 Minuten warten.")
+        if not self.agent.check_password(body.get("password")):
+            self.server.sessions.fail(ip)
+            log("myaddr key: wrong password from %s", ip)
+            raise HTTPError(401, "Passwort falsch.")
+        self.server.sessions.reset(ip)
+        try:
+            fqdn, key = self.agent.names.key_of(str(body.get("id") or ""))
+        except KeyError:
+            raise HTTPError(404, "Kein Schlüssel gespeichert.")
+        log("myaddr key of %s shown to %s", fqdn, ip)
+        return self._send(200, {"ok": True, "name": fqdn, "key": key})
 
     def _login(self, body):
         ip = self.client_ip

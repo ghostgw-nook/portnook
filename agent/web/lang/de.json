@@ -533,5 +533,8 @@
  "js.verbindungen_wert": "{recent} neu in 15 min, {total} seit Start",
  "js.verbindungen_offen": "{n} offen",
  "js.cpu_host": "CPU Host: {p} % ({n} Kerne, WireGuard läuft im Kernel des Hosts)",
- "js.cpu_portnook": "portnook selbst: {p} % eines Kerns"
+ "js.cpu_portnook": "portnook selbst: {p} % eines Kerns",
+ "js.schlussel_anzeigen": "Anzeigen",
+ "js.passwort_erneut": "portnook-Passwort",
+ "js.schlussel_vom_namen": "vom gleichen Namen"
 }
