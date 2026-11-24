@@ -13,7 +13,7 @@ from app.agent import Agent
 from app.store import Store
 from tests.fakes import PRIV, PROTON_SAMPLE, PUB, FakeLanProxy, FakeRun, base_responses, key
 
-EXIT = {"p1": "185.159.157.1", "p2": "185.159.157.2", "p3": "185.159.157.3"}
+EXIT = {"p1": "185.159.157.1", "p2": "185.159.157.2", "p3": "185.159.157.3", "p4": "185.159.157.4"}
 
 
 class TunnelConfTest(unittest.TestCase):
@@ -461,6 +461,70 @@ class StandbyFlowTest(unittest.TestCase):
         with self.assertRaises(ValidationError):
             self.agent.names.save({"names": [{"name": "muster-xx", "domain": "myaddr.tools", "role": "endpoint",
                                                "key": "B" * 43, "profile": "p9"}]})
+
+
+class FourTunnelsTest(unittest.TestCase):
+    """0.37.0 (owner): up to 4 tunnels at once, active + 3 reserves, every one in the round robin."""
+
+    _dump = StandbyFlowTest._dump
+    apply = StandbyFlowTest.apply
+
+    def setUp(self):
+        StandbyFlowTest.setUp(self)
+        for name in ("Proton IT", "Proton NL"):
+            self.fo.store_profile({"name": name, "conf": PROTON_SAMPLE})
+        self.mapped.update({"wg2": ("185.159.157.3", 42000), "wg3": ("185.159.157.4", 43000)})
+        for sb in self.agent.standbys:
+            sb.request = self.agent.standbys[0].request
+
+    def cycle(self):
+        for sb in self.agent.standbys:
+            sb.cycle()
+
+    def test_four_tunnels_promotion_and_back_to_two(self):
+        with self.assertRaises(validate.ValidationError):
+            self.fo.set_settings({"tunnels": 5})
+        self.fo.set_settings({"tunnels": 4})
+        self.apply()
+        self.assertEqual(self.links, {"wg0", "wg1", "wg2", "wg3"})
+        self.assertEqual([(sb.state["profile"], sb.state["iface"]) for sb in self.agent.standbys],
+                         [("p2", "wg1"), ("p3", "wg2"), ("p4", "wg3")])
+        self.cycle()
+        self.assertEqual([r for r, _, _ in self.agent.running_tunnels()], ["active", "standby", "standby2", "standby3"])
+        restore = self.fake.restores()[-1]
+        for iface, port in (("wg2", 42000), ("wg3", 43000)):
+            self.assertIn("-A PF_PRE -i %s -p tcp --dport %d -j DNAT" % (iface, port), restore)
+        self.assertEqual(self.lanproxy.ports, [51234, 40000, 42000, 43000])
+        self.assertIn("ip -4 rule add priority 10033 oif wg3 lookup 51823", self.fake.joined())
+        listing = {p["id"]: p for p in self.fo.listing()}
+        self.assertEqual([listing[i]["reserve"] for i in ("p1", "p2", "p3", "p4")], [0, 1, 2, 3])
+        self.assertEqual(len(self.fo.status()["standby_tunnels"]), 3)
+        # round robin: one URL per tunnel with its own name
+        self.store.update("myaddr", {"extra": [
+            {"id": "n%d" % i, "name": "muster-%d" % i, "domain": "myaddr.tools", "role": "endpoint",
+             "key": "B" * 43, "profile": "p%d" % i} for i in (2, 3, 4)]})
+        self.store.update("myaddr", {"profile": "p1"})
+        self.store.update("redirect", {"provider": "script", "sub": "tv", "mode": "roundrobin"})
+        urls = self.agent.redirect.mappings_via(self.agent.redirect.cfg(), self.agent.redirect.target())[0][1]
+        self.assertEqual(urls, ["https://tv.familie-muster.myaddr.tools:51234", "https://tv.muster-2.myaddr.tools:40000",
+                                "https://tv.muster-3.myaddr.tools:42000", "https://tv.muster-4.myaddr.tools:43000"])
+        # activating the profile of reserve 3 promotes it, the other reserves stay untouched
+        self.fake.calls.clear()
+        res = self.fo.activate("p4")
+        self.assertTrue(res["promoted"])
+        calls = self.fake.joined()
+        self.assertEqual(self.agent.active_if, "wg3")
+        for iface in ("wg1", "wg2", "wg3"):
+            self.assertNotIn("wg-quick up " + iface, calls)
+        self.assertIn("wg-quick up wg0", calls)  # the old active one is a reserve now
+        self.assertEqual({(sb.state["profile"], sb.state["iface"]) for sb in self.agent.standbys},
+                         {("p2", "wg1"), ("p3", "wg2"), ("p1", "wg0")})
+        # back to 2 tunnels: two reserves go down, the highest-priority one stays where it runs
+        self.fake.calls.clear()
+        self.fo.set_settings({"tunnels": 2})
+        self.assertEqual(self.links, {"wg3", "wg0"})
+        self.assertEqual(sorted(sb.state["profile"] for sb in self.agent.standbys), ["", "", "p1"])
+        self.assertFalse([c for c in self.fake.joined() if c.startswith("wg-quick up")])
 
 
 if __name__ == "__main__":

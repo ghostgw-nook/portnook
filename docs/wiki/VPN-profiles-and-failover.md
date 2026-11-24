@@ -1,6 +1,6 @@
 # VPN profiles and failover
 
-> **Applies to:** portnook 0.27 (rc1) · [Versions](Versions)
+> **Applies to:** portnook 0.37 (rc1) · [Versions](Versions)
 
 Page **Connection** → **VPN profiles**. The profile from the wizard is profile 1. **New profile** adds more
 (name, type Proton or fixed port, WireGuard file). Disabled profiles are skipped; **Activate** switches by hand.
@@ -19,6 +19,27 @@ portnook switches. There is **no automatic switch back**:
 On by default. The standby runs all the time as a second tunnel, with its own port and exit IP; connections on
 its port also reach the reverse proxy. Internet requests (DDNS, certificate, Cloudflare) use only the active
 tunnel. With Proton the standby needs a second device slot (one WireGuard file per profile).
+
+## Up to 4 tunnels at once (0.37)
+
+**Failover** → **Tunnels open at once**: 2 (default), 3 or 4. With 3 or 4 the next profiles of the list run as
+**Reserve 2** and **Reserve 3** on `wg2`/`wg3`, each with its own port, exit IP and (if it has one) its own
+name.
+
+- A failover takes the ready reserve with the highest priority. The other reserves keep running untouched (same
+  exit IP, same port); the old active profile comes back as a reserve.
+- **Activate** on a profile that already runs as a reserve switches to it at once, without a rebuild.
+- Fewer tunnels: the reserves with the lowest priority go down, the others stay where they run.
+- **Round robin** in the redirect shares the visitors among all tunnels that have a name of their own
+  (see [Redirect host](Redirect-host)).
+- Every tunnel needs a device slot at Proton, and WireGuard costs CPU on the host.
+
+## Load per tunnel and CPU (0.37)
+
+Every tunnel tile shows **Connections**: new connections in the last 15 minutes and since the start, and with
+the [PROXY protocol](PROXY-protocol) also the connections open right now. Below the tiles: the CPU load of the
+host (WireGuard encrypts in the host's kernel, so this is where it shows) and what portnook itself uses. The CPU
+cannot be split per tunnel; the traffic and the connections per tunnel show which one causes it.
 
 ## Failover
 

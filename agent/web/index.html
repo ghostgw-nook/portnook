@@ -362,6 +362,8 @@ h3 { font-size: 14px; margin: 16px 0 4px; }
     </details>
     <label class="inline"><input type="checkbox" id="fo-standby" checked> {{vpn.reserve_tunnel}}</label>
     <p class="hint">{{vpn.reserve_tunnel_hint}}</p>
+    <div class="cols"><div><label for="fo-tunnels">{{vpn.tunnel_gleichzeitig}}</label><select id="fo-tunnels"><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></div></div>
+    <p class="hint">{{vpn.tunnel_gleichzeitig_hint}}</p>
     <div class="actions"><button class="primary" type="button" id="fo-save">{{vpn.failover_speichern}}</button></div>
   </div>
   <div class="card">
@@ -950,13 +952,27 @@ function profPos(p, pid) {
   const all = p.profiles || [], i = all.findIndex((x) => x.id === pid);
   return all.length > 1 && i >= 0 ? " (" + (i + 1) + tx("js.von") + all.length + ")" : "";
 }
-function standbyBlock(sb, nameOf, p, now, rr) {
+// 0.37.0: load of one tunnel: new connections (15 min / since start) and, with the PROXY protocol, open ones
+function connRow(st, pid) {
+  const c = (((st.usage || {}).connections) || {})[pid];
+  if (!c) return null;
+  return [tx("js.verbindungen"), tx("js.verbindungen_wert").replace("{recent}", c.recent).replace("{total}", c.total) +
+    (c.open != null ? " · " + tx("js.verbindungen_offen").replace("{n}", c.open) : "")];
+}
+function cpuLine(st) {
+  const c = (st.usage || {}).cpu || {};
+  if (c.host == null && c.own == null) return "";
+  return '<p class="hint">' + esc(tx("js.cpu_host").replace("{p}", c.host != null ? c.host : "?").replace("{n}", c.cores || 1) +
+    (c.own != null ? " · " + tx("js.cpu_portnook").replace("{p}", c.own) : "")) + "</p>";
+}
+function standbyBlock(sb, nameOf, p, now, rr, nr) {
   if (!sb || !sb.enabled) return "";
-  if (!sb.profile) return tile("standby", "", tx("js.reserve_gross"), tx("js.keine_reserve"), "", [[tx("vpn.status"), tx("js.keine_reserve")]]);
-  const name = nameOf(sb.profile);
-  const sbRate = rate("standby", sb.profile, sb.rx, sb.tx, now);
+  const role = sb.role || "standby", one = role + "-1", label = sb.slot > 1 ? tx("js.reserve_n").replace("{n}", sb.slot) : tx("js.reserve_gross");
+  if (!sb.profile) return tile(role, "", label, tx("js.keine_reserve"), "", [[tx("vpn.status"), tx("js.keine_reserve")]]);
+  const name = nameOf(sb.profile, role);
+  const sbRate = rate(role, sb.profile, sb.rx, sb.tx, now);
   const url = name && sb.port ? "https://" + name + ":" + sb.port : "";
-  return tile("standby", sb.ready ? "ok" : "warn", rr && sb.ready ? tx("js.rr_rolle").replace("{n}", "2") : tx("js.reserve_gross"), sb.profile_name || "-",
+  return tile(role, sb.ready ? "ok" : "warn", rr && sb.ready && name ? tx("js.rr_rolle").replace("{n}", nr) : label, sb.profile_name || "-",
     rateHtml(sbRate) + sumLines([[tx("js.erreichbar"), url || "-"], sb.ready ? null : [tx("vpn.status"), sb.reason || sb.error || tx("js.wird_aufgebaut")]]), [[tx("js.profil"), (sb.profile_name || "-") + profPos(p, sb.profile)],
     [tx("vpn.status"), sb.ready ? tx("js.bereit") : (sb.reason || sb.error || tx("js.wird_aufgebaut"))],
     [tx("vpn.art"), sb.provider === "fixed" ? tx("js.fester_port") : tx("vpn.proton_nat_pmp")],
@@ -967,8 +983,8 @@ function standbyBlock(sb, nameOf, p, now, rr) {
     [tx("js.handshake"), sb.handshake_age != null ? age(Math.floor(Date.now() / 1000) - sb.handshake_age) : tx("js.tunnel_lauft_nicht")],
     [tx("js.endpoint"), sb.endpoint || sb.config_endpoint || "-"],
     [tx("js.transfer"), tx("js.rx") + bytes(sb.rx) + tx("js.tx") + bytes(sb.tx)],
-    speedRow(sbRate), testRow(((p.speedtest || {}).standby), sb.profile, sbRate, "standby"),
-    testRow(((p.speedtest || {})["standby-1"]), sb.profile, null, "standby-1"),
+    speedRow(sbRate), connRow(S.status, sb.profile), testRow(((p.speedtest || {})[role]), sb.profile, sbRate, role),
+    testRow(((p.speedtest || {})[one]), sb.profile, null, one),
     ["MTU", mtuText(sb)], sb.error && sb.ready ? [tx("js.fehler"), sb.error] : null]);
 }
 function standbyRow(sb) {
@@ -1194,8 +1210,9 @@ async function refresh() {
     const act = (p.profiles || []).find((x) => x.active) || {};
     // 0.27.8: the name that serves the tunnel (active and standby never share one); else the first name of the profile
     const tn = st.myaddr.tunnel_names || {};
-    const sbPid = ((p.failover && p.failover.standby_tunnel) || {}).profile;
-    const nameOf = (pid) => pid && pid === act.id ? tn.active || "" : pid && pid === sbPid ? tn.standby || "" :
+    const sbs = (p.failover && (p.failover.standby_tunnels || [p.failover.standby_tunnel])) || [];
+    const sbRole = (pid) => (sbs.find((x) => x && x.profile === pid) || {}).role;
+    const nameOf = (pid) => pid && pid === act.id ? tn.active || "" : pid && sbRole(pid) ? tn[sbRole(pid)] || "" :
       (pid && has(st.myaddr.profile, pid) ? st.myaddr.fqdn : "") ||
       (st.names || []).filter((n) => has(n.profile, pid)).map((n) => n.name + "." + n.domain)[0];
     // a base name without profile follows the active tunnel (as before 0.27.8)
@@ -1218,9 +1235,11 @@ async function refresh() {
       actName && p.port ? [tx("js.erreichbar"), "https://" + actName + ":" + p.port] : null,
       [tx("js.handshake"), p.up ? age(p.handshake) : tx("js.tunnel_lauft_nicht")], [tx("js.endpoint"), p.endpoint || p.config_endpoint || "-"],
       [tx("js.transfer"), tx("js.rx") + bytes(p.rx) + tx("js.tx") + bytes(p.tx)],
-      speedRow(actRate), testRow((p.speedtest || {}).active, act.id, actRate, "active"),
+      speedRow(actRate), connRow(st, act.id), testRow((p.speedtest || {}).active, act.id, actRate, "active"),
       testRow((p.speedtest || {})["active-1"], act.id, null, "active-1"),
-      ["MTU", mtuText(p)], p.error ? [tx("js.fehler"), p.error] : null]) + standbyBlock(p.failover && p.failover.standby_tunnel, nameOf, p, st.time, rr) + "</div>";
+      ["MTU", mtuText(p)], p.error ? [tx("js.fehler"), p.error] : null]) +
+      (sbs.length ? sbs.map((x, i) => standbyBlock(x, nameOf, p, st.time, rr, i + 2)).join("")
+        : standbyBlock(p.failover && p.failover.standby_tunnel, nameOf, p, st.time, rr, 2)) + "</div>" + cpuLine(st);
   }
   const b = st.backend;
   dot("d-backend", lk("backend"));
@@ -1887,7 +1906,7 @@ function renderProfiles(p) {
     "<tr><td>" + (i + 1) + "</td><td>" + esc(x.name) + "</td><td>" +
     (x.provider === "fixed" ? tx("js.fester_port_2") + esc(x.ports.join(", ")) : tx("vpn.proton_nat_pmp")) +
     (x.mtu_effective ? tx("js.br_span_class_muted_small") + x.mtu_effective + (x.mtu === "conf" ? tx("js.konfiguration") : "") + "</span>" : "") + "</td><td>" +
-    esc(x.server || x.endpoint || "-") + "</td><td>" + (x.active && p.enabled ? tx("js.b_aktiv_b") : x.standby && p.enabled ? tx("js.reserve") + (x.standby_ready ? " (" + tx("js.bereit") + ")" : " - " + esc(x.standby_reason || tx("js.wird_aufgebaut"))) : x.enabled ? tx("js.bereit") : tx("js.aus")) +
+    esc(x.server || x.endpoint || "-") + "</td><td>" + (x.active && p.enabled ? tx("js.b_aktiv_b") : x.standby && p.enabled ? (x.reserve > 1 ? tx("js.reserve_n").replace("{n}", x.reserve) : tx("js.reserve")) + (x.standby_ready ? " (" + tx("js.bereit") + ")" : " - " + esc(x.standby_reason || tx("js.wird_aufgebaut"))) : x.enabled ? tx("js.bereit") : tx("js.aus")) +
     '</td><td><div class="row" style="margin:0">' +
     b("up", x.id, "&uarr;", tx("js.hoher"), i === 0) + b("down", x.id, "&darr;", tx("js.tiefer"), i === list.length - 1) +
     b("edit", x.id, tx("js.bearbeiten")) + (!x.active && x.enabled && p.enabled ? b("activate", x.id, tx("js.aktivieren")) : "") +
@@ -1897,7 +1916,7 @@ function renderProfiles(p) {
   const f = p.failover || {};
   if (!S.foFilled && f.fails) {
     S.foFilled = true;
-    $("fo-fails").value = f.fails; $("fo-hold").value = Math.round((f.hold || 0) / 60); $("fo-standby").checked = f.standby !== false;
+    $("fo-fails").value = f.fails; $("fo-hold").value = Math.round((f.hold || 0) / 60); $("fo-standby").checked = f.standby !== false; $("fo-tunnels").value = String(f.tunnels || 2);
     $("fo-rotate").value = f.rotate || "off"; $("fo-at").value = f.rotate_at || "04:00"; $("fo-hours").value = f.rotate_hours || 24;
     rotateFields();
   }
@@ -1991,7 +2010,7 @@ $("pp-on").addEventListener("change", async (ev) => {
 $("fo-save").addEventListener("click", (ev) => busy(ev.target, async () => {
   try {
     await api("POST", "/api/vpn/failover", { fails: Number($("fo-fails").value || 2),
-      hold: Math.round(Number($("fo-hold").value || 0) * 60), standby: $("fo-standby").checked,
+      hold: Math.round(Number($("fo-hold").value || 0) * 60), standby: $("fo-standby").checked, tunnels: Number($("fo-tunnels").value || 2),
       rotate: $("fo-rotate").value, rotate_at: $("fo-at").value.trim(), rotate_hours: Number($("fo-hours").value || 24) });
     msg("pc-msg", "ok", tx("js.failover_gespeichert"));
   } catch (e) { msg("pc-msg", "err", esc(e.message)); }

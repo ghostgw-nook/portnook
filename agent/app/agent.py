@@ -96,9 +96,12 @@ class Agent:
         self.certs = CertManager(self, clock=clock)
         self.redirect = Redirect(self, clock=clock)
         self.failover = Failover(self, clock=clock)
-        from .standby import Standby
-        self.standby = Standby(self, clock=clock)
+        from .standby import MAX_TUNNELS, Standby
+        # 0.37.0: up to 3 reserves (slots); ``standby`` is the one a failover takes (see the property)
+        self.standbys = [Standby(self, clock=clock, slot=i) for i in range(MAX_TUNNELS - 1)]
         self.egress = Egress(self)
+        from .usage import Usage
+        self.usage = Usage(self, clock=clock)  # 0.37.0: connections per tunnel, CPU
         self.notify = Notifier(self, clock=clock)
 
     # -- state helpers ----------------------------------------------
@@ -205,11 +208,31 @@ class Agent:
                 raise
             self.rt["net"] = {"applied": True, "error": ""}
 
+    @property
+    def standby(self):
+        """The reserve a failover takes (0.37.0): the ready one with the highest-priority profile, else the
+        first running one, else slot 1. With one reserve this is always slot 1, as before."""
+        return self.best_reserve() or next((sb for sb in self.standbys if sb.state.get("profile")),
+                                           self.standbys[0])
+
+    def best_reserve(self, st=None):
+        order = {p["id"]: i for i, p in enumerate(self.profiles(st or self.store.get()))}
+        ready = [sb for sb in self.standbys if sb.state.get("profile") and sb.health()[0]]
+        return min(ready, key=lambda sb: order.get(sb.state["profile"], 99)) if ready else None
+
+    def reserve_for(self, pid):
+        """The reserve slot that runs profile ``pid``, ``None`` if none."""
+        return next((sb for sb in self.standbys if pid and sb.state.get("profile") == pid), None)
+
+    def reserves(self):
+        """The reserve slots that run a tunnel now."""
+        return [sb for sb in self.standbys if sb.state.get("profile") and sb.state.get("iface")]
+
     def tunnel_nets(self, st=None):
         """Networks inside the tunnel that LAN routes must not cover: the /24 of every tunnel address (Proton:
         gateway and NAT-PMP at 10.2.0.1) and the Proton gateway itself."""
         out = {probe.PROTON_GATEWAY + "/32"}
-        for prof in (self.active_profile(st), self.standby.wanted(st)):
+        for prof in [self.active_profile(st)] + [sb.wanted(st) for sb in self.standbys]:
             try:
                 for addr in protonconf.parse(prof["conf"]).addresses if prof and prof.get("conf") else []:
                     net = ipaddress.IPv4Interface(addr).network
@@ -236,8 +259,9 @@ class Agent:
             conf = protonconf.with_mtu(prof["conf"], protonconf.profile_mtu(prof)[1])  # 0.10.3: MTU per profile
             digest = hashlib.sha256(conf.encode()).hexdigest()
             if digest != self._proton_applied or not self.net.link_exists(self.active_if):
-                if self.standby.state.get("profile") == prof["id"]:
-                    self.standby.down()  # the standby's profile becomes the active one by a rebuild
+                for sb in self.standbys:
+                    if sb.state.get("profile") == prof["id"]:
+                        sb.down()  # the standby's profile becomes the active one by a rebuild
                 if self._proton_applied:
                     self.net.tunnel_down(self.active_if)  # another profile (failover) or a new config
                 self.net.tunnel_up(self.active_if, conf)
@@ -245,16 +269,25 @@ class Agent:
                 self.rt["tunnel_built"] = int(self.clock())  # 0.27.12: failover grace (no handshake yet)
                 log("%s mtu %d (profile %s, setting %s)", self.active_if, protonconf.profile_mtu(prof)[1],
                     prof.get("id"), protonconf.profile_mtu(prof)[0])
-            try:
-                self.standby.ensure(st)
-            except Exception as err:  # the standby never breaks the active tunnel
-                self.standby.state.update({"error": str(err)[:200], "ok": False})
-                log("standby tunnel failed: %s", err)
-            running = [t for t in netmod.TUNNEL_IFS if t == self.active_if or t == self.standby.state.get("iface")]
+            # 0.37.0: slots that go down first, so their interface is free for another slot
+            from .standby import plan
+            wanted = plan(self, st)
+            for sb in sorted(self.standbys, key=lambda sb: wanted[sb.slot][0] is not None):
+                try:
+                    sb.ensure(st)
+                except Exception as err:  # the standby never breaks the active tunnel
+                    sb.state.update({"error": str(err)[:200], "ok": False})
+                    log("%s tunnel failed: %s", sb.role, err)
+            used = {self.active_if} | {sb.state.get("iface") for sb in self.standbys}
+            for t in netmod.TUNNEL_IFS:  # leftovers (fewer reserves than before)
+                if t not in used and self.net.link_exists(t):
+                    self.net.tunnel_down(t)
+            running = [t for t in netmod.TUNNEL_IFS if t in used]
             self.net.policy_apply(self.active_if, running)
             self._firewall(st, bip, bport)  # again: the standby's ports may have changed
         else:
-            self.standby.down()
+            for sb in self.standbys:
+                sb.down()
             self.net.proton_down()
             self.net.policy_apply(None, [])
             self._proton_applied = ""
@@ -264,12 +297,12 @@ class Agent:
         lan = self.lan_entry(st)
         prof = self.active_profile(st) if self._proton_on(st) else None
         mss = protonconf.profile_mtu(prof)[1] - 40 if prof else None  # 0.10.3: MSS = tunnel MTU - IPv4/TCP headers
-        sb = self.standby.profile(st) if prof else None
-        if sb:  # one PF_MSS rule set for wg+: the smaller tunnel MTU of active and standby (0.19.0)
-            mss = min(mss, protonconf.profile_mtu(sb)[1] - 40)
         tunnels = [(self.active_if, self.forward_ports(st))]
-        if self.standby.state.get("iface"):
-            tunnels.append((self.standby.state["iface"], self.standby.ports(st)))
+        for one in (self.reserves() if prof else []):
+            sb = one.profile(st)
+            if sb:  # one PF_MSS rule set for wg+: the smallest tunnel MTU of all tunnels (0.19.0)
+                mss = min(mss, protonconf.profile_mtu(sb)[1] - 40)
+            tunnels.append((one.state["iface"], one.ports(st)))
         pp = self.proxy_protocol_on(st)
         tunnel_in = pp and bool(bip) and self._proton_on(st)
         self.net.firewall_apply(bip, bport, self._proton_on(st), tunnels, self.out_allow(st), mss=mss,
@@ -292,7 +325,8 @@ class Agent:
         tunnel. Inbound only."""
         st = st or self.store.get()
         enabled = st["backend"].get("lan_entry", True) is not False
-        every = list(dict.fromkeys(self.forward_ports(st) + (self.standby.ports(st) if self._proton_on(st) else [])))
+        every = list(dict.fromkeys(self.forward_ports(st) + ([p for sb in self.reserves() for p in sb.ports(st)]
+                                                             if self._proton_on(st) else [])))
         ports = [p for p in every if p != UI_PORT]
         ips = []
         if enabled and st["backend"].get("addr"):
@@ -442,9 +476,10 @@ class Agent:
             return ""
         if (self.active_profile() or {}).get("id") in ids:
             return self.vpn_exit_ip()
-        s = self.standby.state
-        if s.get("profile") in ids and self.net.link_exists(s.get("iface") or ""):
-            return s.get("exit_ip") or ""
+        for sb in self.standbys:
+            s = sb.state
+            if s.get("profile") in ids and self.net.link_exists(s.get("iface") or ""):
+                return s.get("exit_ip") or ""
         return ""
 
     def speed_test(self, role, streams=speedtest.STREAMS):
@@ -457,9 +492,10 @@ class Agent:
             if not self.net.link_exists(iface):
                 raise SetupError("Der aktive Tunnel läuft nicht.")
         else:
-            s = self.standby.state
+            sb = next((x for x in self.standbys if x.role == role), None)
+            s = sb.state if sb else {}
             iface, pid = s.get("iface"), s.get("profile")
-            if not pid or not self.standby.health()[0]:
+            if not pid or not sb.health()[0]:
                 raise SetupError("Keine bereite Reserve.")
         if not self._speed_lock.acquire(blocking=False):
             raise SetupError("Es läuft schon ein Speedtest.")
@@ -488,10 +524,11 @@ class Agent:
         act = (self.active_profile() or {}).get("id")
         if act and self.vpn_exit_ip():
             out.append(("active", act, self.vpn_exit_ip()))
-        s = self.standby.state
-        if s.get("profile") and s.get("profile") != act and s.get("exit_ip") and \
-                self.net.link_exists(s.get("iface") or ""):
-            out.append(("standby", s["profile"], s["exit_ip"]))
+        for sb in self.standbys:  # 0.37.0: every reserve, in slot order
+            s = sb.state
+            if s.get("profile") and s.get("profile") != act and s.get("exit_ip") and \
+                    self.net.link_exists(s.get("iface") or ""):
+                out.append((sb.role, s["profile"], s["exit_ip"]))
         return out
 
     def tunnel_names(self):
@@ -558,18 +595,19 @@ class Agent:
                 return "%s.%s" % (n["name"], n["domain"])
         return ""
 
-    def promote_standby(self):
+    def promote_standby(self, sb=None):
         """Make the standby tunnel the active one at once (failover, rotation, manual switch).
 
         Only the policy rule for "everything else" changes; the standby already holds its port and exit IP,
         so redirect and DDNS follow right away. The old active tunnel goes down and the next profile becomes
         the standby. Returns the new active profile or ``None`` if the standby was not ready."""
         with self.op_lock:
-            ok, reason = self.standby.health()
+            sb = sb or self.standby
+            ok, reason = sb.health()
             if not ok:
                 log("standby not ready: %s", reason)
                 return None
-            snap = self.standby.take()
+            snap = sb.take()
             old_if = self.active_if
             self.failover.set_active(snap["profile"])
             self.active_if = snap["iface"]
@@ -588,7 +626,7 @@ class Agent:
             log("standby %s '%s' is the active tunnel now (%s, exit ip %s, port %s)", prof["id"],
                 prof.get("name", ""), self.active_if, snap["exit_ip"] or "-", snap["port"] or "-")
             st = self.store.get()
-            running = [self.active_if] + ([old_if] if self.net.link_exists(old_if) else [])
+            running = [t for t in netmod.TUNNEL_IFS if self.net.link_exists(t)]
             self.net.policy_apply(self.active_if, running)  # the switch itself
             self.net.tunnel_down(old_if)
             self.apply_network()  # firewall for the new ports, the next standby on the old interface
@@ -614,7 +652,8 @@ class Agent:
 
     def teardown(self):
         with self.op_lock:
-            self.standby.down()
+            for sb in self.standbys:
+                sb.down()
             self.net.proton_down()
             self.net.policy_apply(None, [])
             self.lanproxy.stop()
@@ -876,9 +915,9 @@ class Agent:
             if res.get("skipped"):
                 raise SetupError("Redirect nicht möglich: %s." % res["skipped"])
             return res
-        if name in ("speedtest-active", "speedtest-standby"):
+        if name in ("speedtest-active", "speedtest-standby", "speedtest-standby2", "speedtest-standby3"):
             return self.speed_test(name.split("-", 1)[1])
-        if name in ("speedtest-active-1", "speedtest-standby-1"):
+        if name in ("speedtest-active-1", "speedtest-standby-1", "speedtest-standby2-1", "speedtest-standby3-1"):
             return self.speed_test(name.split("-")[1], streams=1)
         if name == "natpmp-renew":
             if not self._proton_on() or self.vpn_provider() != "proton":
@@ -934,8 +973,10 @@ class Agent:
         m = st.get("myaddr") or {}
         myaddr = {"name": m.get("name", ""), "domain": m.get("domain", ""), "fqdn": self.fqdn(),
                   "key_set": bool(m.get("key")), "profile": m.get("profile", ""),
-                  "tunnel_names": {r: self.tunnel_fqdn(r) for r in ("active", "standby")}}
+                  "tunnel_names": {r: self.tunnel_fqdn(r) for r in ["active", "standby"] +
+                                   [sb.role for sb in self.standbys[1:] if sb.state.get("profile")]}}
         out = {"version": self.version, "time": now, "setup": self.setup_state(), "proton": proton,
+               "usage": self.usage.status(),
                "backend": backend, "myaddr": myaddr, "ddns": self.ddns.status(), "names": self.names.status(), "cert": self.certs.status(),
                "delivery": self.certs.delivery_status(), "redirect": self.redirect.status(), "net": dict(self.rt["net"]),
                "natpmpc": probe.natpmpc_available(), "push": self.notify.status(),

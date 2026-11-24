@@ -525,5 +525,13 @@
  "js.pp_ausgeschaltet": "PROXY-Protokoll ausgeschaltet.",
  "js.pp_absender": "Letzte Absender",
  "js.pp_noch_keine": "noch keine Verbindung",
- "pp.gateway_hinweis": "10.2.0.1 ist das Proton-Gateway: Dieser Server gibt die Verbindungen mit seiner eigenen Adresse weiter, die echte IP kommt bei portnook gar nicht an. Ein anderer Proton-Server kann das anders machen."
+ "pp.gateway_hinweis": "10.2.0.1 ist das Proton-Gateway: Dieser Server gibt die Verbindungen mit seiner eigenen Adresse weiter, die echte IP kommt bei portnook gar nicht an. Ein anderer Proton-Server kann das anders machen.",
+ "vpn.tunnel_gleichzeitig": "Gleichzeitig offene Tunnel",
+ "vpn.tunnel_gleichzeitig_hint": "Aktiver Tunnel plus 1 bis 3 Reserven, jede mit eigenem Port und eigener Exit-IP. Im Round Robin verteilt der Redirect auf alle Tunnel mit eigenem Namen. Jeder Tunnel braucht bei Proton einen eigenen Geräteplatz und kostet CPU auf dem Host.",
+ "js.reserve_n": "Reserve {n}",
+ "js.verbindungen": "Verbindungen",
+ "js.verbindungen_wert": "{recent} neu in 15 min, {total} seit Start",
+ "js.verbindungen_offen": "{n} offen",
+ "js.cpu_host": "CPU Host: {p} % ({n} Kerne, WireGuard läuft im Kernel des Hosts)",
+ "js.cpu_portnook": "portnook selbst: {p} % eines Kerns"
 }

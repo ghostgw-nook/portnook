@@ -61,6 +61,8 @@ below. Buttons to reconnect the VPN, renew NAT-PMP, test the backend and update 
   to be updated first, and clients may need a few minutes to see the new IP (DNS cache). The
   list order is a fixed priority. A name can follow several profiles (the active one, else the standby). If all
   of them fail, nothing but push messages goes over your home line.
+  If you like, up to 4 tunnels run at once (active and 3 standbys), with connections per tunnel and the
+  host's CPU load in the overview.
 - **Other VPN providers:** besides Proton (NAT-PMP), any provider's WireGuard file with fixed ports opened in your
   account (e.g. AirVPN); you enter the ports in the UI. The key is entered once and never shown again.
 - **Let's Encrypt via DNS-01:** certificate for `<name>.myaddr.tools` and `*.<name>.myaddr.tools`; test with

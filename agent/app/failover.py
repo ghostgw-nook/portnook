@@ -29,7 +29,7 @@ from . import protonconf, validate
 from .log import log
 from .validate import ValidationError
 
-DEFAULTS = {"fails": 2, "prefer_primary": False, "standby": True, "hold": 600, "rotate": "off", "rotate_at": "04:00", "rotate_hours": 24}
+DEFAULTS = {"fails": 2, "prefer_primary": False, "standby": True, "tunnels": 2, "hold": 600, "rotate": "off", "rotate_at": "04:00", "rotate_hours": 24}
 ROTATE_MODES = ("off", "daily", "hours")
 ROTATE_AT_RE = re.compile(r"([01]\d|2[0-3]):[0-5]\d")
 VERIFY_TIMEOUT = 300  # after a switch: DNS and rewrite must follow within this time
@@ -79,8 +79,14 @@ class Failover:
             raise ValidationError("Rotation: Uhrzeit als HH:MM, z. B. 04:00.")
         if not 1 <= rotate_hours <= 168:
             raise ValidationError("Rotation: 1 bis 168 Stunden.")
+        try:  # 0.37.0 (owner): how many tunnels are open at once, active included
+            tunnels = int(body.get("tunnels", cur.get("tunnels", 2)))
+        except (TypeError, ValueError):
+            tunnels = 0
+        if not 2 <= tunnels <= 4:
+            raise ValidationError("Gleichzeitig offene Tunnel: 2 bis 4.")
         new = {"fails": fails, "hold": hold, "prefer_primary": False, "standby": bool(body.get("standby", cur["standby"])),
-               "rotate": rotate, "rotate_at": rotate_at, "rotate_hours": rotate_hours}
+               "rotate": rotate, "rotate_at": rotate_at, "rotate_hours": rotate_hours, "tunnels": tunnels}
         upd = {"failover": new}
         if (rotate, rotate_at, rotate_hours) != (cur["rotate"], cur["rotate_at"], cur["rotate_hours"]):
             upd["last_rotate"] = int(self.clock())  # count from now, no rotation right after saving
@@ -89,7 +95,10 @@ class Failover:
             log("vpn rotation: %s", "daily at %s" % rotate_at if rotate == "daily" else "every %d h" % rotate_hours)
         log("vpn failover: switch after %d failed checks, standby tunnel %s (hold %d s)",
             fails, "on" if new["standby"] else "off", hold)
-        if new["standby"] != cur["standby"] and self.agent.rt["net"].get("applied"):
+        if new["tunnels"] != cur.get("tunnels", 2):
+            log("vpn tunnels at once: %d", tunnels)
+        if (new["standby"], new["tunnels"]) != (cur["standby"], cur.get("tunnels", 2)) and \
+                self.agent.rt["net"].get("applied"):
             self.agent.apply_network()  # standby tunnel up or down
         return {"ok": True, "failover": new}
 
@@ -208,11 +217,12 @@ class Failover:
         """The running profile was switched off or deleted (0.27.9, owner): the ready standby becomes the active
         tunnel, as on a failover, instead of rebuilding wg0 with the top profile of the list (no jump up, the
         list order stays the priority for the next standby). ``None`` if there is no ready standby."""
-        sb = self.agent.standby.state.get("profile")
+        one = self.agent.best_reserve()
+        sb = one.state.get("profile") if one else ""
         usable = {p["id"] for p in self.agent.profiles(self.agent.store.get()) if p.get("conf") and p.get("enabled", True)}
-        if not sb or sb == (prev or {}).get("id") or sb not in usable or not self.agent.standby.health()[0]:
+        if not sb or sb == (prev or {}).get("id") or sb not in usable:
             return None
-        res = self._promoted(prev, why)
+        res = self._promoted(prev, why, one)
         return res if res.get("ok") else None
 
     def set_active(self, pid):
@@ -257,8 +267,9 @@ class Failover:
                 raise ValidationError("Profil ist ausgeschaltet.")
             prev = self.agent.active_profile(st)
             now = int(self.clock())
-            if self.agent.standby.state.get("profile") == pid and self.agent.standby.health()[0]:
-                return self._promoted(prev, why)
+            one = self.agent.reserve_for(pid)  # 0.37.0: any reserve that runs it
+            if one is not None and one.health()[0]:
+                return self._promoted(prev, why, one)
             self.set_active(pid)
             self.rt.update({"fails": 0, "reason": "", "last_switch": now})
             res = self.agent.start_profile(prof)
@@ -277,10 +288,10 @@ class Failover:
                                         "Profil '%s' läuft wieder" % prof["name"])
             return res
 
-    def _promoted(self, prev, why):
+    def _promoted(self, prev, why, one=None):
         """Switch to the standby tunnel (it is ready). Returns a result like ``activate``."""
         now = int(self.clock())
-        prof = self.agent.promote_standby()
+        prof = self.agent.promote_standby(one)
         if prof is None:
             return {"ok": False, "test": {"ok": False, "error": "Reserve nicht bereit"}}
         self.rt.update({"fails": 0, "reason": "", "last_switch": now, "tried": [], "all_down": 0})
@@ -454,12 +465,18 @@ class Failover:
     def listing(self, st=None):
         st = st or self.agent.store.get()
         act = (self.agent.active_profile(st) or {}).get("id")
-        sb = self.agent.standby.state.get("profile")
-        ready, reason = self.agent.standby.health() if sb else (False, "")
-        if sb and not ready:
-            reason = self.agent.standby.state.get("error") or reason
-        return [dict(self._public(p), active=p["id"] == act, standby=p["id"] == sb,
-                     standby_ready=p["id"] == sb and ready, standby_reason=reason if p["id"] == sb else "")
+        info = {}  # 0.37.0: every reserve
+        for one in self.agent.standbys:
+            sb = one.state.get("profile")
+            if not sb:
+                continue
+            ready, reason = one.health()
+            if not ready:
+                reason = one.state.get("error") or reason
+            info[sb] = (ready, reason, one.slot + 1)
+        return [dict(self._public(p), active=p["id"] == act, standby=p["id"] in info,
+                     standby_ready=info.get(p["id"], (False,))[0], standby_reason=info.get(p["id"], (0, ""))[1],
+                     reserve=info.get(p["id"], (0, "", 0))[2])
                 for p in self.agent.profiles(st)]
 
     def status(self):
@@ -467,7 +484,8 @@ class Failover:
         out.update({"fails_now": self.rt["fails"], "reason": self.rt["reason"], "healthy": self.rt["healthy"],
                     "last_switch": self.rt["last_switch"], "all_down": self.rt["all_down"],
                     "events": list(self.rt["events"]), "next_rotate": self.next_rotate(out),
-                    "verifying": bool(self.rt.get("verify")), "standby_tunnel": self.agent.standby.status()})
+                    "verifying": bool(self.rt.get("verify")), "standby_tunnel": self.agent.standby.status(),
+                    "standby_tunnels": [sb.status() for sb in self.agent.standbys if sb.state.get("profile")]})
         return out
 
     def next_rotate(self, cfg, st=None):

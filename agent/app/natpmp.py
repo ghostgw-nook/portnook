@@ -131,10 +131,9 @@ class NatPmp(threading.Thread):
                 self.cycle()
             except Exception as err:  # keep the loop alive
                 log("natpmp cycle failed: %s", err)
-            standby = getattr(self.agent, "standby", None)
-            if standby is not None:
+            for standby in getattr(self.agent, "standbys", None) or []:
                 try:
-                    standby.cycle()  # 0.19.0: the standby tunnel's mapping, same rhythm
+                    standby.cycle()  # 0.19.0: the standby tunnel's mapping, same rhythm (0.37.0: every reserve)
                 except Exception as err:
                     log("standby natpmp cycle failed: %s", err)
             self._wake.wait(self.interval)

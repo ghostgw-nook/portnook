@@ -31,6 +31,8 @@ COMMIT
 -A PF_MSS -o wg+ -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
 -A PF_MARK -i wg0 -m conntrack --ctstate NEW -j CONNMARK --set-mark 0x5100
 -A PF_MARK -i wg1 -m conntrack --ctstate NEW -j CONNMARK --set-mark 0x5101
+-A PF_MARK -i wg2 -m conntrack --ctstate NEW -j CONNMARK --set-mark 0x5102
+-A PF_MARK -i wg3 -m conntrack --ctstate NEW -j CONNMARK --set-mark 0x5103
 -A PF_MARK -i eth0 -m connmark ! --mark 0x0 -j CONNMARK --restore-mark
 COMMIT
 *filter
@@ -50,6 +52,8 @@ COMMIT
 -A PF_OUT -o eth0 -d 169.254.0.0/16 -j ACCEPT
 -A PF_OUT -o eth0 -m mark --mark 0xca6c -j ACCEPT
 -A PF_OUT -o eth0 -m mark --mark 0xca6d -j ACCEPT
+-A PF_OUT -o eth0 -m mark --mark 0xca6e -j ACCEPT
+-A PF_OUT -o eth0 -m mark --mark 0xca6f -j ACCEPT
 -A PF_OUT -o eth0 -m mark --mark 0x5046 -j ACCEPT
 -A PF_OUT -o eth0 -j REJECT --reject-with icmp-net-prohibited
 COMMIT

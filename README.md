@@ -60,6 +60,8 @@ und das Log. Dazu Knöpfe für Proton neu verbinden, NAT-PMP erneuern, Backend t
   muss er erst umgestellt werden; bis die Clients die neue IP kennen, kann es einige Minuten dauern (DNS-Cache). Die
   Reihenfolge der Liste ist eine feste Priorität. Ein Name kann auch mehreren Profilen folgen (dem aktiven, sonst
   der Reserve). Sind alle gestört, geht ausser Push-Meldungen nichts über die Heimleitung.
+  Auf Wunsch laufen bis zu 4 Tunnel gleichzeitig (aktiv und 3 Reserven), mit Verbindungen pro Tunnel und
+  CPU-Last des Hosts in der Übersicht.
 - **Andere VPN-Anbieter:** neben Proton (NAT-PMP) jede WireGuard-Datei eines Anbieters mit festen, im Kundenkonto
   freigegebenen Ports (z. B. AirVPN); die Ports trägst du im UI ein. Der Schlüssel wird einmal eingegeben und nie wieder angezeigt.
 - **Let's Encrypt per DNS-01:** Zertifikat für `<name>.myaddr.tools` und `*.<name>.myaddr.tools`, zuerst mit

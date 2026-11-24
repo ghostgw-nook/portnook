@@ -13,13 +13,13 @@ from .log import log
 
 LAN_IF = "eth0"
 PROTON_IF = "wg0"  # first tunnel interface; the active tunnel may also run on wg1 (0.19.0)
-TUNNEL_IFS = ("wg0", "wg1")
+TUNNEL_IFS = ("wg0", "wg1", "wg2", "wg3")  # 0.37.0: up to 4 tunnels at once (active + 3 reserves)
 # 0.19.0, two tunnels at once (active + standby): wg-quick runs with "Table = off", the routing is ours.
 # Per interface: the fwmark of its WireGuard socket, its routing table and the mark of connections that came
 # in through it (replies go back through the same tunnel).
-TUNNEL_FWMARK = {"wg0": "0xca6c", "wg1": "0xca6d"}
-TUNNEL_TABLE = {"wg0": 51820, "wg1": 51821}
-TUNNEL_CONNMARK = {"wg0": "0x5100", "wg1": "0x5101"}
+TUNNEL_FWMARK = {"wg0": "0xca6c", "wg1": "0xca6d", "wg2": "0xca6e", "wg3": "0xca6f"}
+TUNNEL_TABLE = {"wg0": 51820, "wg1": 51821, "wg2": 51822, "wg3": 51823}
+TUNNEL_CONNMARK = {"wg0": "0x5100", "wg1": "0x5101", "wg2": "0x5102", "wg3": "0x5103"}
 RULE_PRIO = 10000  # our ip rules: 10000..10099
 
 # (table, builtin chain, own chain)

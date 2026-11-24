@@ -68,6 +68,7 @@ class _Relay:
         self.bind_devices = True  # tests on loopback: False
         self.errors = {}  # name of the listener -> last bind error
         self.recent = deque(maxlen=RECENT)  # 0.36.2: {"at", "via", "ip"} of the last relayed connections
+        self.open = {}  # 0.37.0: name of the listener -> connections relayed right now
 
     @staticmethod
     def _name(key):
@@ -135,6 +136,8 @@ class _Relay:
 
     def _relay(self, client, name=""):
         upstream = None
+        with self._lock:
+            self.open[name] = self.open.get(name, 0) + 1
         try:
             try:
                 self.recent.append({"at": int(time.time()), "via": name, "ip": client.getpeername()[0]})
@@ -163,7 +166,18 @@ class _Relay:
             for s in (client, upstream):
                 if s is not None:
                     s.close()
+            with self._lock:
+                self.open[name] = self.open.get(name, 1) - 1
             self._slots.release()
+
+    def open_by_device(self):
+        """0.37.0: ``{device or address: connections relayed right now}``."""
+        out = {}
+        with self._lock:
+            for name, n in self.open.items():
+                key = name.rsplit(":", 1)[0]
+                out[key] = out.get(key, 0) + max(0, n)
+        return out
 
 
 class LanProxy(_Relay):

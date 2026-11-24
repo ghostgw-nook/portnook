@@ -659,16 +659,22 @@ class Redirect:
         """0.28.0 (owner): ``(name, port)`` of the standby tunnel when the clients are shared between the active
         tunnel and the standby (mode ``roundrobin``), ``None`` when it does not take part: mode off, standby not
         ready, no TCP port, or no name of its own (every tunnel needs its own connection name)."""
+        out = self.rr_reserves(cfg)
+        return out[0] if out else None
+
+    def rr_reserves(self, cfg=None):
+        """0.37.0: ``[(name, port)]`` of every reserve that takes part in the round robin (up to 3), slot order."""
         cfg = cfg if cfg is not None else self.cfg()
         if cfg.get("mode") != "roundrobin" or not self.agent._proton_on():
-            return None
-        sb = self.agent.standby
-        if not sb.state.get("profile") or not sb.health()[0]:
-            return None
-        name, ports = self.agent.tunnel_fqdn("standby"), sb.ports()
-        if not name or not ports or name == self.active_name():
-            return None
-        return name, int(ports[0])
+            return []
+        out, own = [], self.active_name()
+        for sb in self.agent.standbys:
+            if not sb.state.get("profile") or not sb.health()[0]:
+                continue
+            name, ports = self.agent.tunnel_fqdn(sb.role), sb.ports()
+            if name and ports and name != own and name not in [n for n, _ in out]:
+                out.append((name, int(ports[0])))
+        return out
 
     def rr_state(self, cfg=None):
         """Why the round robin does (not) share right now, for the UI."""
@@ -677,10 +683,10 @@ class Redirect:
             return ""
         if self.rr_standby(cfg):
             return "on"
-        sb = self.agent.standby
-        if not sb.state.get("profile") or not sb.health()[0]:
+        ready = [sb for sb in self.agent.standbys if sb.state.get("profile") and sb.health()[0]]
+        if not ready:
             return "no_standby"
-        if not self.agent.tunnel_fqdn("standby"):
+        if not any(self.agent.tunnel_fqdn(sb.role) for sb in ready):
             return "no_name"
         return "no_port"
 
@@ -692,9 +698,7 @@ class Redirect:
         that follow the profile names: the active tunnel first, then the standby. Fixed names stay single."""
         own = self.active_name()
         tunnels = [(own, tgt["port"])]
-        extra = self.rr_standby(cfg) if rr else None
-        if extra:
-            tunnels.append(extra)
+        tunnels += self.rr_reserves(cfg) if rr else []  # 0.37.0: every ready reserve with a name
 
         def urls(to, sub, first_url=None):
             out = []

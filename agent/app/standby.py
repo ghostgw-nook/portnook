@@ -10,6 +10,11 @@ internet (DDNS, ACME, Cloudflare) only use the active tunnel.
 When the active tunnel fails, the failover promotes the standby (``Agent.promote_standby``): the policy rule
 for "everything else" switches to its table, the redirect points at its name and port at once, nothing has
 to be built or resolved anew. The old active tunnel is torn down and the next profile becomes the standby.
+
+0.37.0 (owner): up to 3 reserves at once (``tunnels`` in the failover settings = how many tunnels are open,
+2 to 4). Each reserve is one ``Standby`` slot (roles ``standby``, ``standby2``, ``standby3``). ``plan`` keeps a
+running reserve on its profile and interface as long as that profile is still among the wanted ones, so a
+change elsewhere never rebuilds it (its exit IP and port stay).
 """
 
 import hashlib
@@ -22,6 +27,7 @@ from .log import log
 HANDSHAKE_FRESH = 180
 EXIT_CHECK = 300
 REBUILD_AFTER = 4  # failed standby cycles in a row before its tunnel is rebuilt
+MAX_TUNNELS = len(netmod.TUNNEL_IFS)  # 0.37.0: active + up to 3 reserves
 
 
 def conf_digest(prof):
@@ -29,9 +35,50 @@ def conf_digest(prof):
     return conf, hashlib.sha256(conf.encode()).hexdigest()
 
 
+def reserves_wanted(agent, st):
+    """How many reserves should run (0.37.0): ``tunnels`` - 1, none when the standby is off or no VPN."""
+    cfg = agent.failover.settings(st)
+    if not cfg.get("standby", True) or not agent._proton_on(st):
+        return 0
+    return max(1, min(MAX_TUNNELS, int(cfg.get("tunnels", 2) or 2))) - 1
+
+
+def plan(agent, st):
+    """``[(profile or None, iface)]`` per reserve slot (0.37.0). The wanted profiles are the highest-priority
+    enabled ones that are not active (the list order is the priority); a slot keeps its running profile and its
+    interface while that profile is still wanted, free slots get the rest in order and the free interfaces."""
+    slots = agent.standbys
+    n = min(reserves_wanted(agent, st), len(slots))
+    act = (agent.active_profile(st) or {}).get("id")
+    byid = {p["id"]: p for p in agent.profiles(st) if p["id"] != act and p.get("conf") and p.get("enabled", True)}
+    ids = list(byid)[:n]
+    pick = [None] * len(slots)
+    for i, sb in enumerate(slots):  # any slot keeps a wanted profile it runs (fewer reserves: no rebuild)
+        pid = sb.state.get("profile")
+        if pid in ids and pid not in pick:
+            pick[i] = pid
+    rest = [pid for pid in ids if pid not in pick]
+    for i in range(len(slots)):
+        if pick[i] is None and rest:
+            pick[i] = rest.pop(0)
+    free = [t for t in netmod.TUNNEL_IFS if t != agent.active_if]
+    ifs = [""] * len(slots)
+    for i, sb in enumerate(slots):
+        cur = sb.state.get("iface")
+        if pick[i] and cur in free and cur not in ifs:
+            ifs[i] = cur
+    for i in range(len(slots)):
+        if pick[i] and not ifs[i]:
+            ifs[i] = next((t for t in free if t not in ifs), "")
+    return [(byid[pick[i]] if pick[i] and ifs[i] else None, ifs[i] if pick[i] else "") for i in range(len(slots))]
+
+
 class Standby:
-    def __init__(self, agent, clock=time.time, request=natpmpmod.bound_request, ip_echo=probe.wg_public_ip):
+    def __init__(self, agent, clock=time.time, request=natpmpmod.bound_request, ip_echo=probe.wg_public_ip,
+                 slot=0):
         self.agent = agent
+        self.slot = slot  # 0.37.0: reserve 1..3
+        self.role = "standby" if slot == 0 else "standby%d" % (slot + 1)
         self.clock = clock
         self.request = request
         self.ip_echo = ip_echo
@@ -46,38 +93,35 @@ class Standby:
     # -- which profile ---------------------------------------------------
     def enabled(self, st=None):
         st = st or self.agent.store.get()
-        return bool(self.agent.failover.settings(st).get("standby", True)) and self.agent._proton_on(st)
+        return self.slot < reserves_wanted(self.agent, st)
 
     def wanted(self, st=None):
-        """The standby profile: the highest-priority enabled profile that is not active (0.24.0, the list order
-        is a fixed priority). Same choice as the first failover candidate."""
+        """The profile of this reserve slot (``plan``): the highest-priority enabled profiles that are not active
+        (0.24.0, the list order is a fixed priority)."""
         st = st or self.agent.store.get()
-        if not self.enabled(st):
-            return None
-        act = (self.agent.active_profile(st) or {}).get("id")
-        rest = [p for p in self.agent.profiles(st) if p["id"] != act and p.get("conf") and p.get("enabled", True)]
-        return rest[0] if rest else None
+        return plan(self.agent, st)[self.slot][0]
 
-    def iface(self):
-        return next(t for t in netmod.TUNNEL_IFS if t != self.agent.active_if)
+    def iface(self, st=None):
+        st = st or self.agent.store.get()
+        return plan(self.agent, st)[self.slot][1] or next(t for t in netmod.TUNNEL_IFS if t != self.agent.active_if)
 
     # -- tunnel ------------------------------------------------------------
     def ensure(self, st=None):
         """Bring the standby tunnel to the wanted state (called by ``Agent._apply`` under its op lock)."""
         with self.lock:
             st = st or self.agent.store.get()
-            prof = self.wanted(st)
-            iface = self.iface()
+            prof, iface = plan(self.agent, st)[self.slot]
             s = self.state
-            if s["iface"] and s["iface"] != iface:
-                self.state = s = self._empty()  # the interface became the active one (promotion)
             if prof is None:
-                if s["profile"] or self.agent.net.link_exists(iface):
-                    self.agent.net.tunnel_down(iface)
-                    if s["profile"]:
-                        log("standby off")
+                old = s["iface"] if s["iface"] != self.agent.active_if else ""
+                if old and (s["profile"] or self.agent.net.link_exists(old)):
+                    self.agent.net.tunnel_down(old)
+                if s["profile"]:
+                    log("%s off", self.role)
                 self.state = self._empty()
                 return False
+            if s["iface"] and s["iface"] != iface:
+                self.state = s = self._empty()  # the interface became the active one (promotion)
             conf, digest = conf_digest(prof)
             if s["profile"] == prof["id"] and s["digest"] == digest and self.agent.net.link_exists(iface):
                 return False
@@ -86,7 +130,7 @@ class Standby:
                               since=int(self.clock()))
             if prof.get("provider") == "fixed":
                 self.state["port"] = 0  # the fixed ports apply right away (ports())
-            log("standby: profile %s '%s' on %s", prof["id"], prof.get("name", ""), iface)
+            log("%s: profile %s '%s' on %s", self.role, prof["id"], prof.get("name", ""), iface)
             self.agent.agent_poke(iface)
             return True
 
@@ -148,13 +192,13 @@ class Standby:
             return bool(s["profile"])
         if s["profile"] != prof["id"] or s["digest"] != conf_digest(prof)[1]:
             if s["profile"] or not s["error"] or int(self.clock()) - s.get("since", 0) >= 60:
-                log("standby: wanted %s '%s', running %s: rebuilding", prof["id"], prof.get("name", ""),
+                log("%s: wanted %s '%s', running %s: rebuilding", self.role, prof["id"], prof.get("name", ""),
                     s["profile"] or "none")
                 s["since"] = int(self.clock())
                 return True
             return False
         if not self.agent.net.link_exists(s["iface"]):
-            log("standby: %s is gone, rebuilding", s["iface"])
+            log("%s: %s is gone, rebuilding", self.role, s["iface"])
             s["digest"] = ""
             return True
         return False
@@ -172,7 +216,7 @@ class Standby:
                 s["exit_check"] = now
                 ip = self.ip_echo(s["iface"])
                 if ip != s["exit_ip"]:
-                    log("standby exit ip %s (was %s)", ip or "unknown", s["exit_ip"] or "-")
+                    log("%s exit ip %s (was %s)", self.role, ip or "unknown", s["exit_ip"] or "-")
                     s["exit_ip"] = ip
                     actions.append("changed")
             ok = bool(s["exit_ip"])
@@ -190,7 +234,7 @@ class Standby:
             return dict(s)
         changed = (tcp["port"], tcp["public_ip"]) != (s["port"], s["exit_ip"])
         if tcp["port"] != s["port"]:
-            log("standby natpmp port %d (was %s), exit ip %s", tcp["port"], s["port"] or "-",
+            log("%s natpmp port %d (was %s), exit ip %s", self.role, tcp["port"], s["port"] or "-",
                 tcp["public_ip"] or "-")
         s.update({"port": tcp["port"], "exit_ip": tcp["public_ip"] or s["exit_ip"], "lifetime": tcp["lifetime"]})
         self.agent.remember_port(prof["id"], tcp["port"])
@@ -203,17 +247,17 @@ class Standby:
         s = self.state
         if ok:
             if not s["ok"]:
-                log("standby ok: %s, exit ip %s", s["iface"], s["exit_ip"] or "-")
+                log("%s ok: %s, exit ip %s", self.role, s["iface"], s["exit_ip"] or "-")
             s.update({"ok": True, "fails": 0, "error": "", "last_ok": int(self.clock())})
             return
         s["fails"] += 1
         if s["ok"] or s["error"] != error:
-            log("standby check failed (%d in a row): %s", s["fails"], error)
+            log("%s check failed (%d in a row): %s", self.role, s["fails"], error)
         s.update({"ok": False, "error": error})
         if s["fails"] >= REBUILD_AFTER:
             s["fails"] = 0
             s["digest"] = ""  # the next ensure() rebuilds it
-            log("standby: %d failures in a row, rebuilding %s", REBUILD_AFTER, s["iface"])
+            log("%s: %d failures in a row, rebuilding %s", self.role, REBUILD_AFTER, s["iface"])
             actions.append("rebuild")
 
     # -- health / promotion ------------------------------------------------
@@ -245,7 +289,7 @@ class Standby:
         prof = self.profile(st) or {}
         s = self.state
         ok, reason = self.health() if prof else (False, "")
-        return {"enabled": self.enabled(st), "profile": prof.get("id", ""), "profile_name": prof.get("name", ""),
+        return {"enabled": self.enabled(st), "role": self.role, "slot": self.slot + 1, "profile": prof.get("id", ""), "profile_name": prof.get("name", ""),
                 "iface": s["iface"], "port": (self.ports(st) or [0])[0], "ports": self.ports(st),
                 "exit_ip": s["exit_ip"], "ready": ok, "reason": reason, "error": s["error"],
                 "handshake_age": self.handshake_age() if prof else None, "last_ok": s["last_ok"],
