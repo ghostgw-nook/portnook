@@ -46,6 +46,14 @@ _SUB = re.compile(r"[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?")
 EXAMPLES = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "examples")
 
 
+def _label(value):
+    """0.34.0: a provider's own name, shown in the UI (e.g. "Webhosting Plesk")."""
+    text = " ".join(str(value or "").split())[:40]
+    if any(c in text for c in "<>\"'`"):
+        raise ValidationError("Anbieter-Name: keine Zeichen < > \" ' `.")
+    return text
+
+
 def _host_re(entry):
     """Apache/PCRE host pattern; ``*.example.ch`` captures one label."""
     if entry.startswith("*."):
@@ -435,7 +443,7 @@ class Redirect:
         provider = str(body.get("provider") or "")
         if provider not in ("", "cloudflare", "script"):
             raise ValidationError("Unbekannter Anbieter.")
-        new = {"provider": provider}
+        new = {"provider": provider, "provider_name": _label(body.get("provider_name", cur.get("provider_name")))}
         sub = str(body.get("sub") or "").strip().lower()
         if sub and not _SUB.fullmatch(sub):
             raise ValidationError("Subdomain des Ziels: nur a-z, 0-9 und '-'.")
@@ -525,7 +533,7 @@ class Redirect:
                 pid = "a%d" % n
                 used.add(pid)
             prev = old.get(pid, {})
-            x = {"id": pid, "kind": kind}
+            x = {"id": pid, "kind": kind, "name": _label(row.get("name"))}
             if kind == "cloudflare":
                 cfb = row.get("cf") if isinstance(row.get("cf"), dict) else {}
                 zone = str(cfb.get("zone") or "").strip().lower()
@@ -920,7 +928,7 @@ class Redirect:
         cfg = self.cfg()
         tgt = self.target(cfg)
         cf = cfg.get("cf") or {}
-        return {"provider": cfg.get("provider", ""), "entry_host": cfg.get("entry_host", ""), "sub": cfg.get("sub", ""),
+        return {"provider": cfg.get("provider", ""), "provider_name": cfg.get("provider_name", ""), "entry_host": cfg.get("entry_host", ""), "sub": cfg.get("sub", ""),
                 "status": cfg.get("status", 302), "fixed_port": cfg.get("fixed_port", 0),
                 "cf": {"zone": cf.get("zone", ""), "token_set": bool(cf.get("token"))},
                 "target": tgt["url"] if tgt else "", "last_target": cfg.get("last_target", ""),
@@ -938,7 +946,7 @@ class Redirect:
 
     def _provider_status(self, x, cfg):
         st = (cfg.get("xstate") or {}).get(x["id"]) or {}
-        out = {"id": x["id"], "kind": x["kind"], "last_ok": st.get("last_ok", 0), "last_try": st.get("last_try", 0),
+        out = {"id": x["id"], "kind": x["kind"], "name": x.get("name", ""), "last_ok": st.get("last_ok", 0), "last_try": st.get("last_try", 0),
                "last_error": st.get("last_error", ""), "last_detail": st.get("last_detail", ""),
                "last_rc": st.get("last_rc"), "last_output": st.get("last_output", [])}
         if x["kind"] == "cloudflare":

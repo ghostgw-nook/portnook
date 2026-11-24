@@ -366,6 +366,14 @@ class RedirectAgentTest(unittest.TestCase):
                            "providers": [{"kind": "script", "script": "true\n"}],
                            "rules": [{"entry": "web.example.org", "sub": "", "via": "new0"}]})
         self.assertEqual(self.r.cfg()["rules"][0]["via"], "a2")
+        # 0.34.0: providers carry a name of their own
+        self.r.set_config({"provider": "script", "entry_host": "start.example.ch", "script": "true\n",
+                           "provider_name": "Webhosting  Plesk", "rules": [],
+                           "providers": [{"kind": "script", "name": "Zweites", "script": "true\n"}]})
+        st = self.r.status()
+        self.assertEqual((st["provider_name"], st["providers"][0]["name"]), ("Webhosting Plesk", "Zweites"))
+        with self.assertRaises(ValidationError):
+            self.r.set_config({"provider": "script", "entry_host": "start.example.ch", "provider_name": "<b>"})
         # *.host with a further Cloudflare only in round robin
         with self.assertRaises(ValidationError):
             self.r.set_config({"provider": "script", "entry_host": "start.example.ch", "script": "true\n",

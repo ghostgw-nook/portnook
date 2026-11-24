@@ -105,6 +105,10 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .xurl > summary .ux-title { font-weight: 600; overflow-wrap: anywhere; }
 .xurl > summary .ux-sub { flex: 1 1 100%; overflow-wrap: anywhere; }
 .xurl > summary button { margin-left: auto; }
+.urow { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.4fr) auto; gap: 8px; align-items: end; padding: 6px 0; border-bottom: 1px dashed var(--line, #8884); }
+.urow .rr-res { grid-column: 1 / -1; }
+.ug-prov { margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--line, #8884); }
+@media (max-width: 700px) { .urow { grid-template-columns: minmax(0, 1fr); } }
 .xurl[open] > summary { margin-bottom: 8px; }
 .xprov > summary { cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 8px; font-weight: 600; }
 .xprov > summary .xp-sum { font-weight: 400; overflow-wrap: anywhere; flex: 1; }
@@ -519,21 +523,26 @@ h3 { font-size: 14px; margin: 16px 0 4px; }
         <div><label for="r-port">{{redirect.fester_port_nur_ohne_vpn}}</label><input type="text" id="r-port" inputmode="numeric" placeholder="443"></div>
       </div>
     </details>
+    <details class="help"><summary>{{redirect.ssh_schlussel_fur_das_skript}} <span class="muted small" id="r-pub-sum"></span></summary>
+      <pre class="log" id="r-pub">-</pre>
+      <div class="hint">{{redirect.offentlichen_schlussel_beim_hoster_eintragen}}</div>
+      <label for="r-priv">{{redirect.oder_privaten_schlussel_hochladen_ohne}}</label>
+      <textarea id="r-priv" rows="3" spellcheck="false" autocomplete="off" placeholder="{{redirect.begin_openssh_private_key}}"></textarea>
+      <div class="actions"><button type="button" id="r-gen">{{redirect.neuen_schlussel_erzeugen}}</button>
+        <button type="button" id="r-up">{{redirect.schlussel_hochladen}}</button></div>
+      <div id="r-key-msg"></div>
+    </details>
     <div class="actions"><button class="primary" type="button" id="r-save">{{redirect.speichern_und_ausfuhren}}</button></div>
     <div id="r-msg"></div>
   </div>
   <div class="card">
     <h2>{{redirect.start_urls}}</h2>
     <details class="help"><summary>{{ui.hilfe}}</summary><p>{{redirect.weitere_regeln_hint}}</p></details>
-    <div id="r-rules"></div>
+    <div id="r-groups"></div>
     <div class="actions"><button class="primary" type="button" id="r-save2">{{redirect.speichern_und_ausfuhren}}</button>
-      <button type="button" id="r-rule-add">{{redirect.start_url_hinzufugen}}</button></div>
+      <button type="button" id="r-group-add">{{redirect.start_url_hinzufugen}}</button></div>
   </div>
-  <div class="card">
-    <h2>{{redirect.anbieter}}</h2>
-    <details class="help"><summary>{{ui.hilfe}}</summary><p>{{redirect.weitere_anbieter_hint}}</p></details>
-    <details class="xprov" id="r-p1">
-      <summary><span class="xp-title">{{redirect.anbieter_1}}</span><span class="muted small xp-sum" id="r-p1-sum"></span></summary>
+  <div class="hidden" id="r-p1-home"><div id="r-p1">
       <div class="choice">
         <label><input type="radio" name="r-prov" value="" checked> {{redirect.aus}}</label>
         <label><input type="radio" name="r-prov" value="cloudflare"> {{redirect.cloudflare}}</label>
@@ -547,7 +556,6 @@ h3 { font-size: 14px; margin: 16px 0 4px; }
         <div class="hint">{{redirect.token_mit_der_berechtigung_zone}}</div>
       </div>
       <div id="r-script">
-        <details class="help"><summary>{{ui.hilfe}}</summary><p>{{redirect.lauft_mit_bin_sh_60}}</p></details>
         <label for="g-kind">{{gen.art}}</label>
         <select id="g-kind"><option value="htaccess">{{gen.htaccess}}</option><option value="php">{{gen.php}}</option><option value="">{{gen.eigenes}}</option></select>
         <div id="g-fields">
@@ -559,29 +567,16 @@ h3 { font-size: 14px; margin: 16px 0 4px; }
           </div>
           <p class="hint">{{gen.hinweis}}</p>
         </div>
-        <label for="r-text" id="g-prev-label">{{gen.vorschau}}</label>
-        <textarea id="r-text" rows="14" spellcheck="false" autocomplete="off"></textarea>
+        <details class="help"><summary id="g-prev-label">{{gen.vorschau}}</summary>
+          <textarea id="r-text" rows="14" spellcheck="false" autocomplete="off"></textarea></details>
         <div id="g-msg"></div>
         <div class="actions"><button type="button" id="g-test">{{gen.testen}}</button>
           <button type="button" id="g-own">{{gen.ubernehmen}}</button>
           <span id="g-ex"><button type="button" data-example="plesk-htaccess">{{redirect.beispiel_htaccess_per_ssh}}</button>
           <button type="button" data-example="php-index">{{redirect.beispiel_index_php_per_ssh}}</button></span></div>
+        <p class="hint">{{redirect.lauft_mit_bin_sh_60}}</p>
       </div>
-    </details>
-    <div id="r-provs"></div>
-    <details class="xprov">
-      <summary><span class="xp-title">{{redirect.ssh_schlussel_fur_das_skript}}</span><span class="muted small xp-sum" id="r-pub-sum"></span></summary>
-      <pre class="log" id="r-pub">-</pre>
-      <div class="hint">{{redirect.offentlichen_schlussel_beim_hoster_eintragen}}</div>
-      <label for="r-priv">{{redirect.oder_privaten_schlussel_hochladen_ohne}}</label>
-      <textarea id="r-priv" rows="3" spellcheck="false" autocomplete="off" placeholder="{{redirect.begin_openssh_private_key}}"></textarea>
-      <div class="actions"><button type="button" id="r-gen">{{redirect.neuen_schlussel_erzeugen}}</button>
-        <button type="button" id="r-up">{{redirect.schlussel_hochladen}}</button></div>
-      <div id="r-key-msg"></div>
-    </details>
-    <div class="actions"><button class="primary" type="button" id="r-save3">{{redirect.speichern_und_ausfuhren}}</button>
-      <button type="button" id="r-prov-add">{{redirect.anbieter_hinzufugen}}</button></div>
-  </div>
+  </div></div>
 </section>
 
 <!-- Settings (per browser) -->
@@ -1167,9 +1162,10 @@ function redirectRows(r) {
 }
 // 0.32.0: further providers are numbered from 2 in their saved order
 function provLabel(id, r) {
-  const list = (r && r.providers) || [...document.querySelectorAll("#r-provs .xprov")].map((d, i) => ({ id: d.dataset.id || "new" + i }));
-  const i = list.findIndex((x) => x.id === id);
-  return tx("redirect.anbieter_n").replace("{n}", String(i < 0 ? "?" : i + 2));
+  r = r || S.redirState || {};
+  if (!id) return r.provider_name || tx("redirect.anbieter_1");
+  const list = r.providers || [], i = list.findIndex((x) => x.id === id);
+  return (i >= 0 && list[i].name) || tx("redirect.anbieter_n").replace("{n}", String(i < 0 ? "?" : i + 2));
 }
 function delRows(d) {
   const row = (name, t, what) => !t.configured ? null : [name, what + ": " + (t.error ? tx("js.fehler_3") + t.error
@@ -1391,7 +1387,7 @@ function toggleRedirect() {
   $("r-cf").classList.toggle("hidden", p !== "cloudflare");
   $("r-script").classList.toggle("hidden", p !== "script");
 }
-document.querySelectorAll("input[name=r-prov]").forEach((r) => r.addEventListener("change", () => { toggleRedirect(); if (S.provSum) S.provSum(); }));
+document.querySelectorAll("input[name=r-prov]").forEach((r) => r.addEventListener("change", () => { toggleRedirect(); groupsChanged(); }));
 async function refreshRedirect() {
   let st;
   try { st = await loadStatus(); } catch (e) { return; }
@@ -1403,17 +1399,8 @@ async function refreshRedirect() {
     $("r-mode").value = r.mode || "failover";
     $("r-port").value = r.fixed_port || ""; $("r-zone").value = r.cf.zone || "";
     S.rulesCtx = { active: r.active_name || "", bound: r.profile_names || [], endpoints: r.endpoints || [], entries: (st.names || []).filter((n) => n.role === "entry").sort(byNameOrder).map((n) => n.name + "." + n.domain) };
-    $("r-provs").innerHTML = "";
-    (r.providers || []).forEach(addProv);
-    $("r-rules").innerHTML = "";
     S.redirState = r;
-    const saved = [{ entry: r.entry_host, sub: r.sub, to: r.to }].concat(r.rules || []).filter((x, i) => i === 0 || x.entry);
-    if (!saved[0].entry && saved.length === 1) saved.length = 0;
-    saved.forEach(addRule);
-    // 0.33.0 (owner): every myaddr name with the use "entry" gets its own section, ready to save
-    S.rulesCtx.entries.filter((e) => !saved.some((x) => x.entry === e)).forEach((e) => addRule({ entry: e, sub: "", to: "", auto: true }));
-    if (!$("r-rules").children.length) addRule();
-    S.provSum();
+    fillGroups(r);
     try { $("r-text").value = (await api("GET", "/api/redirect/script")).script; } catch (e) {}
     const g = r.gen || {};
     $("g-kind").value = g.kind || (r.provider === "script" ? "" : "htaccess");
@@ -1424,13 +1411,13 @@ async function refreshRedirect() {
   }
   $("r-token-state").textContent = r.cf.token_set ? tx("js.gespeichert") : "";
   $("r-pub").textContent = r.ssh_public_key || tx("js.noch_kein_schlussel");
-  $("r-pub-sum").textContent = r.ssh_public_key ? r.ssh_public_key.split(" ").slice(0, 1).join("") + " …" + r.ssh_public_key.split(" ")[1].slice(-12) : tx("js.noch_kein_schlussel");
+  $("r-pub-sum").textContent = r.ssh_public_key ? "(" + r.ssh_public_key.split(" ")[0] + " …" + (r.ssh_public_key.split(" ")[1] || "").slice(-12) + ")" : "(" + tx("js.noch_kein_schlussel") + ")";
   dot("r-dot", LCLASS[L.redirect] || "");
   $("r-state").innerHTML = dl(redirectRows(r).concat([r.last_rc !== null && r.last_rc !== undefined && r.provider === "script" ? [tx("js.exit_code"), String(r.last_rc)] : null]));
   S.rulesPort = (/:(\d+)$/.exec(r.target || "") || [])[1] || "";
   if (S.rulesCtx) Object.assign(S.rulesCtx, { active: r.active_name || "", bound: r.profile_names || [] });
   S.redirState = r;
-  document.querySelectorAll("#r-rules .xurl").forEach(rulePreview);
+  document.querySelectorAll("#r-groups .xurl").forEach(groupPreview);
   $("r-out").textContent = (r.last_output || []).join("\n") || "-";
 }
 // ---- script generator (0.16.0) ----
@@ -1471,14 +1458,10 @@ document.querySelectorAll("button[data-example]").forEach((btn) => btn.addEventL
   try { $("r-text").value = (await api("GET", "/api/redirect/example/" + btn.dataset.example)).script; } catch (e) { msg("r-msg", "err", esc(e.message)); }
 }));
 $("r-save").addEventListener("click", (ev) => busy(ev.target, async () => {
-  const body = { provider: document.querySelector("input[name=r-prov]:checked").value, mode: $("r-mode").value, status: Number($("r-status").value), fixed_port: $("r-port").value.trim(),
-    cf: { zone: $("r-zone").value.trim(), token: $("r-token").value.trim() }, gen: genOf(),
-    rules: [...document.querySelectorAll("#r-rules .xurl")].map(ruleOf), providers: [...document.querySelectorAll("#r-provs .xprov")].map(provOf) };
+  const body = Object.assign({ provider: document.querySelector("input[name=r-prov]:checked").value, mode: $("r-mode").value, status: Number($("r-status").value), fixed_port: $("r-port").value.trim(),
+    cf: { zone: $("r-zone").value.trim(), token: $("r-token").value.trim() }, gen: genOf() }, groupsBody());
   if (body.provider === "script" && !body.gen.kind) body.script = $("r-text").value;
   if (body.provider !== "script") delete body.gen;
-  const main = body.rules.shift() || { entry: "", sub: "", to: "" };
-  delete main.via;
-  Object.assign(body, { entry_host: main.entry, sub: main.sub, to: main.to });
   try {
     await api("POST", "/api/redirect", body);
     $("r-token").value = "";
@@ -1545,151 +1528,215 @@ $("p-test").addEventListener("click", (ev) => busy(ev.target, async () => {
 
 // ---- rewrite rules and further myaddr names (rows edited in place) -------------------------
 function delBtn() { return '<button type="button" data-del>' + esc(tx("js.loschen")) + "</button>"; }
-document.addEventListener("click", (ev) => { const b = ev.target.closest("button[data-del]"); if (b) { ev.preventDefault(); b.closest("tr, .xurl").remove(); } });
-function viaOptions(sel, keep) {
-  const v = keep !== undefined ? keep : sel.value, n = document.querySelectorAll("#r-provs .xprov").length;
-  sel.innerHTML = '<option value="">' + esc(tx("redirect.anbieter_haupt")) + "</option>" +
-    [...document.querySelectorAll("#r-provs .xprov")].map((d, i) => '<option value="' + esc(d.dataset.id || "new" + i) + '">' + esc(tx("redirect.anbieter_n").replace("{n}", String(i + 2))) + "</option>").join("");
-  sel.value = [...sel.options].some((o) => o.value === v) ? v : "";
-  return n;
+document.addEventListener("click", (ev) => { const b = ev.target.closest("button[data-del]"); if (b) { ev.preventDefault(); b.closest("tr, .urow, .xurl").remove(); if (b.closest("#r-groups") || !document.body.contains(b)) groupsChanged(); } });
+// 0.34.0 (owner): one section per entry name with all its subdomains, and its provider right below
+const KINDS = [["cloudflare", "redirect.cloudflare"], ["htaccess", "gen.htaccess"], ["php", "gen.php"], ["own", "gen.eigenes"]];
+function baseOf(entry, bases) {
+  const e = entry.replace(/^\*\./, "*.");
+  const hit = bases.filter((b) => e === b || e.endsWith("." + b)).sort((a, b) => b.length - a.length)[0];
+  return hit || (e.startsWith("*.") ? e.slice(2) : e);
 }
-function refreshVia() { document.querySelectorAll("#r-rules .rr-via").forEach((s) => viaOptions(s)); }
-function ruleOf(tr) {
-  const sel = tr.querySelector(".rr-entry-sel").value, esub = tr.querySelector(".rr-esub").value.trim().toLowerCase().replace(/\.+$/, "");
-  return { entry: sel === "custom" ? tr.querySelector(".rr-entry").value.trim().toLowerCase() : (esub ? esub + "." : "") + sel,
-    sub: tr.querySelector(".rr-sub").value.trim().toLowerCase(), to: tr.querySelector(".rr-to").value, via: tr.querySelector(".rr-via").value };
+function fillGroups(r) {
+  const ctx = S.rulesCtx, entries = ctx.entries;
+  const all = [{ entry: r.entry_host, sub: r.sub, to: r.to, via: "", main: true }].concat((r.rules || []).map((x) => Object.assign({}, x, { via: x.via || "" }))).filter((x) => x.entry);
+  const bases = entries.slice();
+  all.forEach((x) => { if (!bases.some((b) => x.entry === b || x.entry.endsWith("." + b))) bases.push(x.entry.replace(/^\*\./, "")); });
+  const groups = [];
+  all.forEach((x) => {
+    const b = baseOf(x.entry, bases);
+    let g = groups.find((y) => y.base === b);
+    if (!g) groups.push(g = { base: b, rows: [], via: x.via, main: false });
+    g.main = g.main || !!x.main;
+    if (x.main) { g.via = ""; g.rows.unshift(x); } else g.rows.push(x);
+  });
+  groups.sort((a, b) => (b.main ? 1 : 0) - (a.main ? 1 : 0));
+  entries.filter((e) => !groups.some((g) => g.base === e)).forEach((e) => groups.push({ base: e, rows: [{ entry: e, sub: "", to: "" }], via: "", auto: true }));
+  if (!groups.length) groups.push({ base: "", rows: [{ entry: "", sub: "", to: "" }], via: "", main: true, custom: true });
+  if (!groups.some((g) => g.main)) groups[0].main = true;
+  $("r-p1-home").appendChild($("r-p1"));  // provider 1 lives in the main section; keep it when refilling
+  $("r-groups").innerHTML = "";
+  const owner = {};
+  groups.forEach((g) => {
+    // the first section using a further provider holds its settings, later ones share it
+    const p = g.via && (r.providers || []).find((x) => x.id === g.via);
+    if (g.main) g.own = true;
+    else if (p && !owner[g.via]) { owner[g.via] = true; g.own = true; g.prov = p; }
+    addGroup(g);
+  });
+  groupsChanged();
 }
-function rulePreview(tr) {
-  const r = ruleOf(tr), ctx = S.rulesCtx || { endpoints: [] };
-  // 0.23.1: the main name and every profile's name follow the active VPN profile (failover)
-  const follows = !!ctx.active && (!r.to || (ctx.bound || []).includes(r.to));
-  const base = follows ? ctx.active : r.to || ctx.endpoints[0] || "<name>.myaddr.tools";
-  const sub = r.sub || "";
-  tr.querySelector(".rr-follow").textContent = follows ? tx("js.folgt_aktivem_profil") : "";
-  const custom = tr.querySelector(".rr-entry-sel").value === "custom";
-  tr.querySelector(".rr-entry").classList.toggle("hidden", !custom); tr.querySelector(".rr-esub").classList.toggle("hidden", custom);
-  const out = r.entry ? "https://" + (sub ? sub + "." : "") + base + ":" + (S.rulesPort || "<Port>") : "-";
-  tr.querySelector(".rr-out").textContent = out;
-  if (!tr.classList.contains("xurl")) return;
-  // summary: entry -> target, via which provider, and its state
-  const rs = S.redirState || {}, saved = (rs.mappings || []).some((m) => m.entry === r.entry && (m.via || "") === r.via);
-  const p = r.via ? (rs.providers || []).find((x) => x.id === r.via) : rs.provider ? rs : null;
-  const err = p && p.last_error, ok = p && p.last_ok && !err;
-  const viaText = r.via ? provLabel(r.via) : tx("redirect.anbieter_1");
-  tr.querySelector(".ux-title").textContent = r.entry || tx("redirect.neue_start_url");
-  tr.querySelector(".ux-sub").textContent = "→ " + out + " · " + tx("redirect.uber_anbieter").replace("{p}", viaText) +
-    (!saved ? " · " + tx(tr.dataset.auto ? "redirect.neu_aus_namen" : "redirect.nicht_gespeichert") : "");
-  tr.querySelector(".ux-dot").className = "dot ux-dot " + (!saved || !p ? "" : err ? "err" : ok ? "ok" : "");
-  tr.querySelector(".ux-state").textContent = !saved || !p ? "" : err ? tx("js.fehler_3") + err : ok ? tx("js.ok") + age(p.last_ok) : "";
+function addGroup(g) {
+  const ctx = S.rulesCtx || { endpoints: [], entries: [] };
+  g = g || { base: "", rows: [{ entry: "", sub: "", to: "" }], via: "", custom: true };
+  const custom = g.custom || !ctx.entries.includes(g.base);
+  const d = document.createElement("details");
+  d.className = "xurl" + (g.main ? " ug-main" : ""); d.open = !!(g.auto || g.custom || g.main && !g.base);
+  d.dataset.gid = "g" + (S.gseq = (S.gseq || 0) + 1); d.dataset.pid = g.prov ? g.prov.id : ""; d.dataset.auto = g.auto ? "1" : "";
+  d.dataset.via = g.via || "";
+  d.innerHTML = '<summary><span class="dot ux-dot"></span><span class="ux-title"></span>' + (g.main ? '<span class="muted small">' + esc(tx("js.haupteingang")) + "</span>" : delBtn()) +
+    '<span class="muted small ux-sub"></span></summary>' +
+    (custom ? '<label>' + esc(tx("redirect.eingang_host")) + '</label><input type="text" class="ug-base" spellcheck="false" placeholder="start.example.ch">' : "") +
+    '<div class="ug-rows"></div><div class="actions" style="border:0;margin-top:4px;padding-top:0"><button type="button" class="ug-addrow">' + esc(tx("redirect.subdomain_hinzufugen")) + "</button></div>" +
+    '<div class="ug-prov"><h3>' + esc(tx("redirect.anbieter_einzahl")) + '</h3>' +
+    (g.main ? "" : '<select class="ug-share"></select>') +
+    '<div class="ug-own"><label>' + esc(tx("redirect.anbieter_name")) + '</label><input type="text" class="ug-pname" maxlength="40" spellcheck="false">' +
+    '<div class="ug-fields"></div></div><p class="small ux-state"></p></div>';
+  if (custom) d.querySelector(".ug-base").value = g.base;
+  else d.querySelector(".ux-title").dataset.base = g.base;
+  const pname = d.querySelector(".ug-pname");
+  if (g.main) {
+    pname.value = (S.redirState || {}).provider_name || "";
+    d.querySelector(".ug-fields").appendChild($("r-p1"));
+  } else {
+    pname.value = (g.prov && g.prov.name) || "";
+    d.querySelector(".ug-fields").appendChild(provFields(g.prov));
+  }
+  g.rows.forEach((x) => addRow(d, x));
+  d.querySelector(".ug-addrow").addEventListener("click", () => { addRow(d, { entry: "", sub: "", to: "" }); groupsChanged(); });
+  d.addEventListener("input", groupsChanged); d.addEventListener("change", groupsChanged);
+  $("r-groups").appendChild(d);
+  d._share = g.own ? "own" : g.via ? "pid:" + g.via : "main";
+  return d;
 }
-function addRule(r) {
-  const ctx = S.rulesCtx || { endpoints: [], entries: [] }, first = !$("r-rules").children.length;
-  const entries = ctx.entries;  // 0.23.0: subdomain (or * for any) in its own field (owner)
+function addRow(d, x) {
+  const ctx = S.rulesCtx || { endpoints: [] }, first = d.classList.contains("ug-main") && !d.querySelector(".urow");
   const opt = (v, t) => '<option value="' + esc(v) + '">' + esc(t || v) + "</option>";
   const lab = (k) => "<label>" + esc(tx(k)) + "</label>";
-  // 0.33.0 (owner): every start URL is a section of its own
-  const d = document.createElement("details");
-  d.className = "xurl"; d.open = !!(r && r.auto) || !r;
-  d.innerHTML = '<summary><span class="dot ux-dot"></span><span class="ux-title"></span>' + (first ? '<span class="muted small">' + esc(tx("js.haupteingang")) + "</span>" : delBtn()) +
-    '<span class="muted small ux-sub"></span></summary>' +
-    '<div class="cols"><div>' + lab("redirect.regel_eingang") + '<div class="rr-epair"><input type="text" class="rr-esub" spellcheck="false" placeholder="' + esc(tx(first ? "js.regel_eingang_sub_ph1" : "js.regel_eingang_sub_ph")) + '">' +
-    '<select class="rr-entry-sel">' + entries.map((e) => opt(e)).join("") + opt("custom", tx("js.eigener_host")) + "</select></div>" +
-    '<input type="text" class="rr-entry" spellcheck="false" placeholder="start.example.ch' + (first ? "" : " / *.example.ch") + '"></div>' +
+  const row = document.createElement("div");
+  row.className = "urow" + (first ? " ur-main" : "");
+  row.innerHTML = "<div>" + lab("redirect.subdomain") + '<input type="text" class="rr-esub" spellcheck="false" placeholder="' + esc(tx("js.regel_eingang_sub_ph1")) + '"></div>' +
     "<div>" + lab("redirect.regel_ziel") + '<input type="text" class="rr-sub" spellcheck="false" placeholder="' + esc(tx("js.regel_ziel_placeholder")) + '"></div>' +
     "<div>" + lab("redirect.regel_ziel_name") + '<select class="rr-to">' + ctx.endpoints.map((e, i) => opt(i ? e : "", ctx.active && !i ? tx("js.aktives_profil") : e + (i ? "" : " (" + tx("js.hauptname") + ")"))).join("") + "</select></div>" +
-    "<div>" + lab("redirect.regel_uber") + '<select class="rr-via"' + (first ? " disabled" : "") + "></select></div></div>" +
-    '<p class="small">' + esc(tx("redirect.regel_ergebnis")) + ': <span class="rr-out"></span> <span class="muted small rr-follow"></span></p>' +
-    '<p class="small ux-state"></p>';
-  const entry = (r && r.entry) || "";
-  const sel = d.querySelector(".rr-entry-sel");
-  // split "app.eingang-muster.myaddr.io" into subdomain "app" and the name "eingang-muster.myaddr.io"
-  const base = entries.find((e) => entry === e) || entries.filter((e) => entry.endsWith("." + e)).sort((a, b) => b.length - a.length)[0];
-  sel.value = base ? base : entry ? "custom" : (entries[0] || "custom");
-  d.querySelector(".rr-esub").value = base && entry !== base ? entry.slice(0, -base.length - 1) : "";
-  d.querySelector(".rr-entry").value = base ? "" : entry;
-  d.querySelector(".rr-sub").value = (r && r.sub) || "";
-  d.querySelector(".rr-to").value = (r && r.to) || "";
-  d.dataset.auto = r && r.auto ? "1" : "";
-  viaOptions(d.querySelector(".rr-via"), (r && r.via) || "");
-  d.addEventListener("input", () => rulePreview(d)); d.addEventListener("change", () => { rulePreview(d); if (S.provSum) S.provSum(); });
-  $("r-rules").appendChild(d);
-  rulePreview(d);
+    "<div>" + (first ? "" : delBtn()) + "</div>" +
+    '<p class="small rr-res"><span class="muted">' + esc(tx("redirect.regel_ergebnis")) + ':</span> <span class="ur-from"></span> → <span class="rr-out"></span> <span class="muted small rr-follow"></span></p>';
+  const base = groupBase(d), e = x.entry || "";
+  row.querySelector(".rr-esub").value = base && e !== base && e.endsWith("." + base) ? e.slice(0, -base.length - 1) : "";
+  row.querySelector(".rr-sub").value = x.sub || "";
+  row.querySelector(".rr-to").value = x.to || "";
+  d.querySelector(".ug-rows").appendChild(row);
 }
-$("r-rule-add").addEventListener("click", () => addRule());
-document.addEventListener("click", (ev) => { if (ev.target.closest("#r-rules button[data-del]") && S.provSum) setTimeout(S.provSum, 0); });
-// ---- further providers (0.32.0) ----
-function addProv(x) {
-  x = x || { kind: "cloudflare", gen: { kind: "htaccess" } };
-  const d = document.createElement("details");
-  d.className = "xprov"; d.dataset.id = x.id || ""; d.open = !x.id;
-  const g = x.gen || {}, art = x.kind === "cloudflare" ? "cloudflare" : (g.kind || "own");
-  const opt = (v, t) => '<option value="' + v + '">' + esc(tx(t)) + "</option>";
-  d.innerHTML = '<summary><span class="xp-title"></span><span class="muted small xp-sum"></span><button type="button" class="xp-del">' + esc(tx("js.loschen")) + "</button></summary>" +
-    '<label>' + esc(tx("redirect.anbieter_art")) + '</label><select class="xp-art">' + opt("cloudflare", "redirect.cloudflare") + opt("htaccess", "gen.htaccess") +
-    opt("php", "gen.php") + opt("own", "gen.eigenes") + "</select>" +
-    '<div class="xp-cf cols"><div><label>' + esc(tx("redirect.zone_zone_id_oder_domain")) + '</label><input type="text" class="xp-zone" spellcheck="false" autocomplete="off"></div>' +
-    '<div><label>' + esc(tx("redirect.api_token")) + ' <span class="muted small xp-tstate"></span></label><input type="password" class="xp-token" autocomplete="off" placeholder="' + esc(tx("myaddr.leer_lassen_unverandert")) + '"></div></div>' +
-    '<div class="xp-gen cols"><div><label>' + esc(tx("gen.user")) + '</label><input type="text" class="xp-user" spellcheck="false" autocomplete="off" placeholder="webuser"></div>' +
-    '<div><label>' + esc(tx("gen.host")) + '</label><input type="text" class="xp-host" spellcheck="false" autocomplete="off" placeholder="server.example.ch"></div>' +
-    '<div><label>' + esc(tx("gen.port")) + '</label><input type="text" class="xp-port" inputmode="numeric" placeholder="22"></div>' +
-    '<div><label>' + esc(tx("gen.root")) + '</label><input type="text" class="xp-root" spellcheck="false" autocomplete="off" placeholder="httpdocs"></div></div>' +
-    '<div class="xp-own"><label>' + esc(tx("gen.skript")) + '</label><textarea class="xp-text" rows="8" spellcheck="false" autocomplete="off"></textarea></div>' +
-    '<p class="hint xp-hint"></p>';
-  d.querySelector(".xp-art").value = art;
-  d.querySelector(".xp-zone").value = (x.cf && x.cf.zone) || "";
-  d.querySelector(".xp-tstate").textContent = x.cf && x.cf.token_set ? tx("js.gespeichert") : "";
-  d.querySelector(".xp-user").value = g.user || ""; d.querySelector(".xp-host").value = g.host || "";
-  d.querySelector(".xp-port").value = g.port || ""; d.querySelector(".xp-root").value = g.root || "";
-  d.querySelector(".xp-text").value = x.script || "";
+function provFields(p) {
+  p = p || { kind: "cloudflare" };
+  const g = p.gen || {}, art = p.kind === "cloudflare" ? "cloudflare" : (g.kind || "own");
+  const w = document.createElement("div");
+  const lab = (k) => "<label>" + esc(tx(k)) + "</label>";
+  w.className = "xp";
+  w.innerHTML = lab("redirect.anbieter_art") + '<select class="xp-art">' + KINDS.map(([v, k]) => '<option value="' + v + '">' + esc(tx(k)) + "</option>").join("") + "</select>" +
+    '<div class="xp-cf cols"><div>' + lab("redirect.zone_zone_id_oder_domain") + '<input type="text" class="xp-zone" spellcheck="false" autocomplete="off"></div>' +
+    "<div><label>" + esc(tx("redirect.api_token")) + ' <span class="muted small xp-tstate"></span></label><input type="password" class="xp-token" autocomplete="off" placeholder="' + esc(tx("myaddr.leer_lassen_unverandert")) + '"></div></div>' +
+    '<div class="xp-gen cols"><div>' + lab("gen.user") + '<input type="text" class="xp-user" spellcheck="false" autocomplete="off" placeholder="webuser"></div>' +
+    "<div>" + lab("gen.host") + '<input type="text" class="xp-host" spellcheck="false" autocomplete="off" placeholder="server.example.ch"></div>' +
+    "<div>" + lab("gen.port") + '<input type="text" class="xp-port" inputmode="numeric" placeholder="22"></div>' +
+    "<div>" + lab("gen.root") + '<input type="text" class="xp-root" spellcheck="false" autocomplete="off" placeholder="httpdocs"></div></div>' +
+    '<div class="xp-own">' + lab("gen.skript") + '<textarea class="xp-text" rows="8" spellcheck="false" autocomplete="off"></textarea></div><p class="hint xp-hint"></p>';
+  w.querySelector(".xp-art").value = art;
+  w.querySelector(".xp-zone").value = (p.cf && p.cf.zone) || "";
+  w.querySelector(".xp-tstate").textContent = p.cf && p.cf.token_set ? tx("js.gespeichert") : "";
+  w.querySelector(".xp-user").value = g.user || ""; w.querySelector(".xp-host").value = g.host || "";
+  w.querySelector(".xp-port").value = g.port || ""; w.querySelector(".xp-root").value = g.root || "";
+  w.querySelector(".xp-text").value = p.script || "";
   const toggle = () => {
-    const a = d.querySelector(".xp-art").value;
-    d.querySelector(".xp-cf").classList.toggle("hidden", a !== "cloudflare");
-    d.querySelector(".xp-gen").classList.toggle("hidden", a !== "htaccess" && a !== "php");
-    d.querySelector(".xp-own").classList.toggle("hidden", a !== "own");
-    d.querySelector(".xp-hint").textContent = tx(a === "cloudflare" ? "redirect.token_mit_der_berechtigung_zone" : a === "own" ? "redirect.lauft_mit_bin_sh_60" : "gen.hinweis");
+    const a = w.querySelector(".xp-art").value;
+    w.querySelector(".xp-cf").classList.toggle("hidden", a !== "cloudflare");
+    w.querySelector(".xp-gen").classList.toggle("hidden", a !== "htaccess" && a !== "php");
+    w.querySelector(".xp-own").classList.toggle("hidden", a !== "own");
+    w.querySelector(".xp-hint").textContent = tx(a === "cloudflare" ? "redirect.token_mit_der_berechtigung_zone" : a === "own" ? "redirect.lauft_mit_bin_sh_60" : "gen.hinweis");
   };
-  d.querySelector(".xp-art").addEventListener("change", () => { toggle(); numberProvs(); });
-  d.querySelector(".xp-del").addEventListener("click", (ev) => { ev.preventDefault(); d.remove(); numberProvs(); });
-  $("r-provs").appendChild(d);
-  toggle(); numberProvs();
+  w.querySelector(".xp-art").addEventListener("change", toggle);
+  toggle();
+  return w;
 }
-function numberProvs() {
-  refreshVia();
-  const rules = [...document.querySelectorAll("#r-rules .xurl")].map(ruleOf);
-  document.querySelectorAll("#r-provs .xprov").forEach((d, i) => {
-    d.querySelector(".xp-title").textContent = tx("redirect.anbieter_n").replace("{n}", String(i + 2));
-    // collapsed: its type and the start URLs that go via it
-    const sel = d.querySelector(".xp-art"), via = d.dataset.id || "new" + i;
-    const urls = rules.filter((r) => r.via === via && r.entry).map((r) => r.entry);
-    d.querySelector(".xp-sum").textContent = sel.options[sel.selectedIndex].text + " · " + (urls.length ? urls.join(", ") : tx("redirect.anbieter_keine_url"));
+function groupBase(d) {
+  const b = d.querySelector(".ug-base");
+  return b ? b.value.trim().toLowerCase().replace(/^\*\./, "").replace(/\.+$/, "") : (d.querySelector(".ux-title").dataset.base || "");
+}
+function groupName(d) {
+  // the name a provider is shown by: its own name, else the section's start URL
+  return d.querySelector(".ug-pname").value.trim() || (d.classList.contains("ug-main") ? tx("redirect.anbieter_1") : groupBase(d) || tx("redirect.neue_start_url"));
+}
+function groupsChanged() {
+  const groups = [...document.querySelectorAll("#r-groups .xurl")];
+  const owners = groups.filter((d) => d.classList.contains("ug-main") || (d.querySelector(".ug-share") && d.querySelector(".ug-share").value === "own"));
+  groups.forEach((d) => {
+    const sh = d.querySelector(".ug-share");
+    if (sh) {
+      const keep = sh.value || d._share || "main";
+      sh.innerHTML = '<option value="own">' + esc(tx("redirect.anbieter_eigen")) + "</option>" + owners.filter((o) => o !== d).map((o) =>
+        '<option value="' + (o.classList.contains("ug-main") ? "main" : o.dataset.gid) + '">' + esc(tx("redirect.anbieter_gleich").replace("{p}", groupName(o))) + "</option>").join("");
+      const want = keep.startsWith("pid:") ? (owners.find((o) => o.dataset.pid === keep.slice(4)) || {}).dataset : null;
+      sh.value = want ? want.gid : [...sh.options].some((o) => o.value === keep) ? keep : "main";
+      d._share = sh.value;
+      d.querySelector(".ug-own").classList.toggle("hidden", sh.value !== "own");
+    }
+    groupPreview(d);
   });
 }
-function provOf(d, i) {
-  const a = d.querySelector(".xp-art").value, x = { id: d.dataset.id || "" };
+function groupVia(d) {
+  // provider of a section: "" = provider 1, a saved id, or "new<n>" for one added now (its place in the list)
+  if (d.classList.contains("ug-main")) return "";
+  const sh = d.querySelector(".ug-share").value;
+  if (sh === "main") return "";
+  const o = sh === "own" ? d : document.querySelector('#r-groups .xurl[data-gid="' + sh + '"]');
+  if (!o) return "";
+  return o.dataset.pid || "new" + [...document.querySelectorAll("#r-groups .xurl")].filter((x) => !x.classList.contains("ug-main") && x.querySelector(".ug-share").value === "own").indexOf(o);
+}
+function groupRules(d) {
+  const base = groupBase(d), via = groupVia(d);
+  return [...d.querySelectorAll(".urow")].map((row) => {
+    const sub = row.querySelector(".rr-esub").value.trim().toLowerCase().replace(/\.+$/, "");
+    return { entry: base ? (sub ? sub + "." : "") + base : "", sub: row.querySelector(".rr-sub").value.trim().toLowerCase(), to: row.querySelector(".rr-to").value, via };
+  });
+}
+function groupPreview(d) {
+  const ctx = S.rulesCtx || { endpoints: [] }, rs = S.redirState || {}, base = groupBase(d);
+  const t = d.querySelector(".ux-title");
+  const rules = groupRules(d), via = rules.length ? rules[0].via : "";
+  d.querySelectorAll(".urow").forEach((row, i) => {
+    const r = rules[i], follows = !!ctx.active && (!r.to || (ctx.bound || []).includes(r.to));
+    const tb = follows ? ctx.active : r.to || ctx.endpoints[0] || "<name>.myaddr.tools";
+    row.querySelector(".ur-from").textContent = r.entry || "-";
+    row.querySelector(".rr-out").textContent = r.entry ? "https://" + (r.sub ? r.sub + "." : "") + tb + ":" + (S.rulesPort || "<Port>") : "-";
+    row.querySelector(".rr-follow").textContent = follows ? tx("js.folgt_aktivem_profil") : "";
+  });
+  const saved = rules.length && rules.every((r) => (rs.mappings || []).some((m) => m.entry === r.entry && (m.via || "") === r.via));
+  const p = via ? (rs.providers || []).find((x) => x.id === via) : rs.provider ? rs : null;
+  const err = p && p.last_error, ok = p && p.last_ok && !err;
+  const own = d.classList.contains("ug-main") || d.querySelector(".ug-share").value === "own";
+  const kind = d.classList.contains("ug-main") ? document.querySelector("input[name=r-prov]:checked").value : own ? d.querySelector(".xp-art").value : "";
+  const kindText = kind ? " (" + tx((KINDS.find(([v]) => v === kind) || [0, kind === "script" ? "redirect.skript" : kind === "" ? "redirect.aus" : "redirect.cloudflare"])[1]) + ")" : "";
+  const shareTo = !own ? document.querySelector('#r-groups .xurl[data-gid="' + d.querySelector(".ug-share").value + '"]') : null;
+  const pn = own ? groupName(d) + kindText : d.querySelector(".ug-share").value === "main" ? groupName(document.querySelector("#r-groups .ug-main")) : shareTo ? groupName(shareTo) : "";
+  t.textContent = base || tx("redirect.neue_start_url");
+  d.querySelector(".ux-sub").textContent = (rules.length === 1 ? tx("redirect.eintrag") : tx("redirect.eintraege").replace("{n}", String(rules.length))) + " · " + tx("redirect.uber_anbieter").replace("{p}", pn) +
+    (!saved ? " · " + tx(d.dataset.auto ? "redirect.neu_aus_namen" : "redirect.nicht_gespeichert") : "");
+  d.querySelector(".ux-dot").className = "dot ux-dot " + (!saved || !p ? "" : err ? "err" : ok ? "ok" : "");
+  d.querySelector(".ux-state").textContent = !saved || !p ? "" : err ? tx("js.fehler_3") + err : ok ? tx("js.ok") + age(p.last_ok) : "";
+}
+function provOfGroup(d) {
+  const w = d.querySelector(".xp"), a = w.querySelector(".xp-art").value, x = { id: d.dataset.pid || "", name: d.querySelector(".ug-pname").value.trim() };
   if (a === "cloudflare") {
-    x.kind = "cloudflare"; x.cf = { zone: d.querySelector(".xp-zone").value.trim() };
-    if (d.querySelector(".xp-token").value.trim()) x.cf.token = d.querySelector(".xp-token").value.trim();
+    x.kind = "cloudflare"; x.cf = { zone: w.querySelector(".xp-zone").value.trim() };
+    if (w.querySelector(".xp-token").value.trim()) x.cf.token = w.querySelector(".xp-token").value.trim();
   } else {
     x.kind = "script";
-    x.gen = a === "own" ? { kind: "" } : { kind: a, user: d.querySelector(".xp-user").value.trim(), host: d.querySelector(".xp-host").value.trim(),
-      port: d.querySelector(".xp-port").value.trim() || 22, root: d.querySelector(".xp-root").value.trim() };
-    if (a === "own") x.script = d.querySelector(".xp-text").value;
+    x.gen = a === "own" ? { kind: "" } : { kind: a, user: w.querySelector(".xp-user").value.trim(), host: w.querySelector(".xp-host").value.trim(),
+      port: w.querySelector(".xp-port").value.trim() || 22, root: w.querySelector(".xp-root").value.trim() };
+    if (a === "own") x.script = w.querySelector(".xp-text").value;
   }
   return x;
 }
-$("r-prov-add").addEventListener("click", () => addProv());
-S.provSum = () => {
-  const p1 = document.querySelector("input[name=r-prov]:checked").value;
-  const u1 = [...document.querySelectorAll("#r-rules .xurl")].map(ruleOf).filter((r) => !r.via && r.entry).map((r) => r.entry);
-  $("r-p1-sum").textContent = (p1 === "cloudflare" ? tx("redirect.cloudflare") : p1 === "script" ? tx("redirect.skript") : tx("redirect.aus")) + " · " + (u1.length ? u1.join(", ") : tx("redirect.anbieter_keine_url"));
-  provSum2();
-};
-const provSum2 = () => document.querySelectorAll("#r-provs .xprov").forEach((d, i) => {
-  const sel = d.querySelector(".xp-art"), via = d.dataset.id || "new" + i;
-  const urls = [...document.querySelectorAll("#r-rules .xurl")].map(ruleOf).filter((r) => r.via === via && r.entry).map((r) => r.entry);
-  d.querySelector(".xp-sum").textContent = sel.options[sel.selectedIndex].text + " · " + (urls.length ? urls.join(", ") : tx("redirect.anbieter_keine_url"));
-});
-["r-save2", "r-save3"].forEach((id) => $(id).addEventListener("click", () => $("r-save").click()));
+function groupsBody() {
+  const groups = [...document.querySelectorAll("#r-groups .xurl")];
+  const main = groups.find((d) => d.classList.contains("ug-main"));
+  const providers = groups.filter((d) => d !== main && d.querySelector(".ug-share").value === "own").map(provOfGroup);
+  const rules = [].concat(...groups.map(groupRules)).filter((r) => r.entry);
+  const mr = main ? groupRules(main)[0] : null;
+  const rest = rules.filter((r) => !mr || r !== rules.find((x) => x.entry === mr.entry && !x.via));
+  return { provider_name: main ? main.querySelector(".ug-pname").value.trim() : "", providers, rules: rest,
+    entry_host: mr ? mr.entry : "", sub: mr ? mr.sub : "", to: mr ? mr.to : "" };
+}
+$("r-group-add").addEventListener("click", () => { addGroup(); groupsChanged(); });
+["r-save2"].forEach((id) => $(id).addEventListener("click", () => $("r-save").click()));
 const DOMAINS = ["myaddr.tools", "myaddr.dev", "myaddr.io"];
 function fillNames(st) {
   const m = st.myaddr || {}, d = st.ddns || {};

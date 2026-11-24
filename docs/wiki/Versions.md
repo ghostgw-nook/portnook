@@ -9,7 +9,7 @@ versions.
 
 | Edition | portnook | Notes |
 |---|---|---|
-| **rc1** | 0.27.x–0.33.x | First release candidate before going public. All pages written; 0.30 adds the PROXY protocol, 0.31 round robin with Cloudflare, 0.32 further redirect providers. |
+| **rc1** | 0.27.x–0.34.x | First release candidate before going public. All pages written; 0.30 adds the PROXY protocol, 0.31 round robin with Cloudflare, 0.32 further redirect providers. |
 
 ## Older versions
 
@@ -36,6 +36,6 @@ Example: [v0.27.0](https://github.com/ghostgw-nook/portnook/tree/v0.27.0/docs/wi
 | [Real visitor IP (PROXY protocol)](PROXY-protocol) | 0.30 | 0.30 |
 | [Names and certificate](Names-and-certificate) | 0.27 | 0.27 (rc1) |
 | [VPN profiles and failover](VPN-profiles-and-failover) | 0.27 | 0.27 (rc1) |
-| [Redirect host](Redirect-host) | 0.33 | 0.27 (rc1), round robin with a Cloudflare Worker in 0.31, further providers in 0.32, sections per start URL in 0.33 |
+| [Redirect host](Redirect-host) | 0.34 | 0.27 (rc1), round robin with a Cloudflare Worker in 0.31, further providers in 0.32, a section per entry name with its provider in 0.34 |
 | [Home network and LAN entry](Home-network-and-LAN-entry) | 0.27 | 0.27 (rc1) |
 | [Troubleshooting](Troubleshooting) | 0.27 | 0.27 (rc1) |

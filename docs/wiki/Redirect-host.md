@@ -1,6 +1,6 @@
 # Redirect host
 
-> **Applies to:** portnook 0.33 (rc1) · [Versions](Versions)
+> **Applies to:** portnook 0.34 (rc1) · [Versions](Versions)
 
 The VPN port changes now and then, and a URL with a port is hard to remember. A **redirect host** is a fixed
 address, e.g. `https://start.example.com`, that answers with a **302** to the current
@@ -55,21 +55,24 @@ again.
 
 `*.` rules work with the script, and with Cloudflare only in round robin (Worker). The entry host itself needs a certificate (wildcard for `*.` rules).
 
-## Page layout (0.33)
+## Page layout (0.34)
 
-- **General:** mode (failover or round robin), status code, fixed port.
-- **Start URLs:** one collapsible section per start URL. Collapsed it shows a light, the start URL, its target
-  and the provider it goes via. The first one is the main entry. **Every name with the use "entry"** on the page
+- **General:** mode (failover or round robin), status code, fixed port, SSH key for the scripts.
+- **Start URLs:** one collapsible section **per entry name** with all its subdomains (empty = the name itself,
+  `*` = any subdomain, e.g. `app`; **Add subdomain** for more). Collapsed it shows a light, the name, the number of
+  entries and the provider. The first section is the main entry. **Every name with the use "entry"** on the page
   **Names** gets a section automatically (marked "new from Names"); **Save and run** takes it over. Your own
   hosts (e.g. `start.example.com`) with **Add start URL**.
-- **Providers:** provider 1 (Cloudflare or script), further providers and the SSH key, each collapsible.
+- **Provider at the bottom of each section:** an own one with a name of your choice (e.g. "Web hosting Plesk")
+  and its type and access data, or **Same as …** another section's provider. Names on the same web hosting use
+  "Same as", so they share one `.htaccess`.
 
 ## Further providers (0.32)
 
-Each start address can use its own provider. Card **Providers** → **Add provider**: Cloudflare (zone and
-token, e.g. a second account), `.htaccess` or `index.php` via SSH (another web hosting), or your own script.
-In each start URL **Via** picks the provider; the main entry always goes via provider 1. Several start URLs on
-the same web hosting belong to the same provider, or one overwrites the other's `.htaccess`.
+Each section can use its own provider: Cloudflare (zone and token, e.g. a second account), `.htaccess` or
+`index.php` via SSH (another web hosting), or your own script. The main entry always goes via provider 1 (the
+one in the first section). Several names on the same web hosting share one provider ("Same as"), or one
+overwrites the other's `.htaccess`.
 
 | Entry | Via | Example |
 |---|---|---|
