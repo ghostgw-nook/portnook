@@ -100,6 +100,12 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .msg.ok { border-color: var(--ok); } .msg.err { border-color: var(--err); } .msg.warn { border-color: var(--warn); }
 .msg dl { margin-top: 6px; }
 .xprov { border: 1px solid var(--line, #8884); border-radius: 8px; padding: 10px 12px; margin: 10px 0; }
+.xurl { border: 1px solid var(--line, #8884); border-radius: 8px; padding: 10px 12px; margin: 10px 0; }
+.xurl > summary { cursor: pointer; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.xurl > summary .ux-title { font-weight: 600; overflow-wrap: anywhere; }
+.xurl > summary .ux-sub { flex: 1 1 100%; overflow-wrap: anywhere; }
+.xurl > summary button { margin-left: auto; }
+.xurl[open] > summary { margin-bottom: 8px; }
 .xprov > summary { cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 8px; font-weight: 600; }
 .xprov > summary .xp-sum { font-weight: 400; overflow-wrap: anywhere; flex: 1; }
 .xprov[open] > summary { margin-bottom: 8px; }
@@ -498,28 +504,15 @@ h3 { font-size: 14px; margin: 16px 0 4px; }
     <div class="actions"><button type="button" data-action="redirect-run">{{redirect.jetzt_ausfuhren}}</button></div>
   </div>
   <div class="card">
-    <h2>{{redirect.redirect_host}}</h2>
+    <h2>{{redirect.allgemein}}</h2>
     <details class="help"><summary>{{ui.hilfe}}</summary><p>{{redirect.eine_feste_eingangs_adresse_z}} <code>start.example.ch</code>{{redirect.leitet_mit_302_auf_das}}
       <code>https://&lt;sub&gt;.&lt;name&gt;.myaddr.tools:&lt;VPN-Port&gt;</code> {{redirect.weiter_myaddr_tools_kann_selbst}}</p></details>
-    <div class="choice">
-      <label><input type="radio" name="r-prov" value="" checked> {{redirect.aus}}</label>
-      <label><input type="radio" name="r-prov" value="cloudflare"> {{redirect.cloudflare}}</label>
-      <label><input type="radio" name="r-prov" value="script"> {{redirect.skript_z_b_plesk_per}}</label>
-    </div>
     <div class="cols">
       <div><label for="r-mode">{{redirect.modus}}</label><select id="r-mode">
         <option value="failover">{{redirect.modus_failover}}</option>
         <option value="roundrobin">{{redirect.modus_roundrobin}}</option></select></div>
     </div>
     <div class="hint" id="r-mode-hint">{{redirect.modus_hint}}</div>
-    <div id="r-cf">
-      <h3>{{redirect.cloudflare}}</h3>
-      <div class="cols">
-        <div><label for="r-zone">{{redirect.zone_zone_id_oder_domain}}</label><input type="text" id="r-zone" spellcheck="false" autocomplete="off"></div>
-        <div><label for="r-token">{{redirect.api_token}} <span class="muted small" id="r-token-state"></span></label><input type="password" id="r-token" placeholder="{{myaddr.leer_lassen_unverandert}}" autocomplete="off"></div>
-      </div>
-      <div class="hint">{{redirect.token_mit_der_berechtigung_zone}}</div>
-    </div>
     <details class="help"><summary>{{ui.erweitert}}</summary>
       <div class="cols">
         <div><label for="r-status">{{redirect.statuscode}}</label><select id="r-status"><option>302</option><option>307</option><option>301</option><option>308</option></select></div>
@@ -530,50 +523,64 @@ h3 { font-size: 14px; margin: 16px 0 4px; }
     <div id="r-msg"></div>
   </div>
   <div class="card">
-    <h2>{{redirect.weitere_regeln}}</h2>
+    <h2>{{redirect.start_urls}}</h2>
     <details class="help"><summary>{{ui.hilfe}}</summary><p>{{redirect.weitere_regeln_hint}}</p></details>
-    <div class="tablewrap"><table><thead><tr><th>{{redirect.regel_eingang}}</th><th>{{redirect.regel_ziel}}</th><th>{{redirect.regel_ziel_name}}</th><th>{{redirect.regel_uber}}</th><th>{{redirect.regel_ergebnis}}</th><th></th></tr></thead>
-      <tbody id="r-rules"></tbody></table></div>
+    <div id="r-rules"></div>
     <div class="actions"><button class="primary" type="button" id="r-save2">{{redirect.speichern_und_ausfuhren}}</button>
-      <button type="button" id="r-rule-add">{{redirect.regel_hinzufugen}}</button></div>
+      <button type="button" id="r-rule-add">{{redirect.start_url_hinzufugen}}</button></div>
   </div>
   <div class="card">
-    <h2>{{redirect.weitere_anbieter}}</h2>
+    <h2>{{redirect.anbieter}}</h2>
     <details class="help"><summary>{{ui.hilfe}}</summary><p>{{redirect.weitere_anbieter_hint}}</p></details>
-    <div id="r-provs"></div>
-    <div class="actions"><button class="primary" type="button" id="r-save4">{{redirect.speichern_und_ausfuhren}}</button>
-      <button type="button" id="r-prov-add">{{redirect.anbieter_hinzufugen}}</button></div>
-  </div>
-  <div class="card" id="r-script">
-    <h2>{{redirect.skript}}</h2>
-    <details class="help"><summary>{{ui.hilfe}}</summary><p>{{redirect.lauft_mit_bin_sh_60}}</p></details>
-    <label for="g-kind">{{gen.art}}</label>
-    <select id="g-kind"><option value="htaccess">{{gen.htaccess}}</option><option value="php">{{gen.php}}</option><option value="">{{gen.eigenes}}</option></select>
-    <div id="g-fields">
-      <div class="cols">
-        <div><label for="g-user">{{gen.user}}</label><input type="text" id="g-user" placeholder="webuser" spellcheck="false" autocomplete="off"></div>
-        <div><label for="g-host">{{gen.host}}</label><input type="text" id="g-host" placeholder="server.example.ch" spellcheck="false" autocomplete="off"></div>
-        <div><label for="g-port">{{gen.port}}</label><input type="text" id="g-port" inputmode="numeric" placeholder="22"></div>
-        <div><label for="g-root">{{gen.root}}</label><input type="text" id="g-root" placeholder="httpdocs" spellcheck="false" autocomplete="off"></div>
+    <details class="xprov" id="r-p1">
+      <summary><span class="xp-title">{{redirect.anbieter_1}}</span><span class="muted small xp-sum" id="r-p1-sum"></span></summary>
+      <div class="choice">
+        <label><input type="radio" name="r-prov" value="" checked> {{redirect.aus}}</label>
+        <label><input type="radio" name="r-prov" value="cloudflare"> {{redirect.cloudflare}}</label>
+        <label><input type="radio" name="r-prov" value="script"> {{redirect.skript_z_b_plesk_per}}</label>
       </div>
-      <p class="hint">{{gen.hinweis}}</p>
-    </div>
-    <label for="r-text" id="g-prev-label">{{gen.vorschau}}</label>
-    <textarea id="r-text" rows="14" spellcheck="false" autocomplete="off"></textarea>
-    <div id="g-msg"></div>
+      <div id="r-cf">
+        <div class="cols">
+          <div><label for="r-zone">{{redirect.zone_zone_id_oder_domain}}</label><input type="text" id="r-zone" spellcheck="false" autocomplete="off"></div>
+          <div><label for="r-token">{{redirect.api_token}} <span class="muted small" id="r-token-state"></span></label><input type="password" id="r-token" placeholder="{{myaddr.leer_lassen_unverandert}}" autocomplete="off"></div>
+        </div>
+        <div class="hint">{{redirect.token_mit_der_berechtigung_zone}}</div>
+      </div>
+      <div id="r-script">
+        <details class="help"><summary>{{ui.hilfe}}</summary><p>{{redirect.lauft_mit_bin_sh_60}}</p></details>
+        <label for="g-kind">{{gen.art}}</label>
+        <select id="g-kind"><option value="htaccess">{{gen.htaccess}}</option><option value="php">{{gen.php}}</option><option value="">{{gen.eigenes}}</option></select>
+        <div id="g-fields">
+          <div class="cols">
+            <div><label for="g-user">{{gen.user}}</label><input type="text" id="g-user" placeholder="webuser" spellcheck="false" autocomplete="off"></div>
+            <div><label for="g-host">{{gen.host}}</label><input type="text" id="g-host" placeholder="server.example.ch" spellcheck="false" autocomplete="off"></div>
+            <div><label for="g-port">{{gen.port}}</label><input type="text" id="g-port" inputmode="numeric" placeholder="22"></div>
+            <div><label for="g-root">{{gen.root}}</label><input type="text" id="g-root" placeholder="httpdocs" spellcheck="false" autocomplete="off"></div>
+          </div>
+          <p class="hint">{{gen.hinweis}}</p>
+        </div>
+        <label for="r-text" id="g-prev-label">{{gen.vorschau}}</label>
+        <textarea id="r-text" rows="14" spellcheck="false" autocomplete="off"></textarea>
+        <div id="g-msg"></div>
+        <div class="actions"><button type="button" id="g-test">{{gen.testen}}</button>
+          <button type="button" id="g-own">{{gen.ubernehmen}}</button>
+          <span id="g-ex"><button type="button" data-example="plesk-htaccess">{{redirect.beispiel_htaccess_per_ssh}}</button>
+          <button type="button" data-example="php-index">{{redirect.beispiel_index_php_per_ssh}}</button></span></div>
+      </div>
+    </details>
+    <div id="r-provs"></div>
+    <details class="xprov">
+      <summary><span class="xp-title">{{redirect.ssh_schlussel_fur_das_skript}}</span><span class="muted small xp-sum" id="r-pub-sum"></span></summary>
+      <pre class="log" id="r-pub">-</pre>
+      <div class="hint">{{redirect.offentlichen_schlussel_beim_hoster_eintragen}}</div>
+      <label for="r-priv">{{redirect.oder_privaten_schlussel_hochladen_ohne}}</label>
+      <textarea id="r-priv" rows="3" spellcheck="false" autocomplete="off" placeholder="{{redirect.begin_openssh_private_key}}"></textarea>
+      <div class="actions"><button type="button" id="r-gen">{{redirect.neuen_schlussel_erzeugen}}</button>
+        <button type="button" id="r-up">{{redirect.schlussel_hochladen}}</button></div>
+      <div id="r-key-msg"></div>
+    </details>
     <div class="actions"><button class="primary" type="button" id="r-save3">{{redirect.speichern_und_ausfuhren}}</button>
-      <button type="button" id="g-test">{{gen.testen}}</button>
-      <button type="button" id="g-own">{{gen.ubernehmen}}</button>
-      <span id="g-ex"><button type="button" data-example="plesk-htaccess">{{redirect.beispiel_htaccess_per_ssh}}</button>
-      <button type="button" data-example="php-index">{{redirect.beispiel_index_php_per_ssh}}</button></span></div>
-    <h3>{{redirect.ssh_schlussel_fur_das_skript}}</h3>
-    <pre class="log" id="r-pub">-</pre>
-    <div class="hint">{{redirect.offentlichen_schlussel_beim_hoster_eintragen}}</div>
-    <label for="r-priv">{{redirect.oder_privaten_schlussel_hochladen_ohne}}</label>
-    <textarea id="r-priv" rows="3" spellcheck="false" autocomplete="off" placeholder="{{redirect.begin_openssh_private_key}}"></textarea>
-    <div class="actions"><button type="button" id="r-gen">{{redirect.neuen_schlussel_erzeugen}}</button>
-      <button type="button" id="r-up">{{redirect.schlussel_hochladen}}</button></div>
-    <div id="r-key-msg"></div>
+      <button type="button" id="r-prov-add">{{redirect.anbieter_hinzufugen}}</button></div>
   </div>
 </section>
 
@@ -1160,7 +1167,8 @@ function redirectRows(r) {
 }
 // 0.32.0: further providers are numbered from 2 in their saved order
 function provLabel(id, r) {
-  const i = ((r && r.providers) || S.provs || []).findIndex((x) => x.id === id);
+  const list = (r && r.providers) || [...document.querySelectorAll("#r-provs .xprov")].map((d, i) => ({ id: d.dataset.id || "new" + i }));
+  const i = list.findIndex((x) => x.id === id);
   return tx("redirect.anbieter_n").replace("{n}", String(i < 0 ? "?" : i + 2));
 }
 function delRows(d) {
@@ -1383,7 +1391,7 @@ function toggleRedirect() {
   $("r-cf").classList.toggle("hidden", p !== "cloudflare");
   $("r-script").classList.toggle("hidden", p !== "script");
 }
-document.querySelectorAll("input[name=r-prov]").forEach((r) => r.addEventListener("change", toggleRedirect));
+document.querySelectorAll("input[name=r-prov]").forEach((r) => r.addEventListener("change", () => { toggleRedirect(); if (S.provSum) S.provSum(); }));
 async function refreshRedirect() {
   let st;
   try { st = await loadStatus(); } catch (e) { return; }
@@ -1398,7 +1406,13 @@ async function refreshRedirect() {
     $("r-provs").innerHTML = "";
     (r.providers || []).forEach(addProv);
     $("r-rules").innerHTML = "";
-    [{ entry: r.entry_host, sub: r.sub, to: r.to }].concat(r.rules || []).forEach(addRule);
+    S.redirState = r;
+    const saved = [{ entry: r.entry_host, sub: r.sub, to: r.to }].concat(r.rules || []).filter((x, i) => i === 0 || x.entry);
+    if (!saved[0].entry && saved.length === 1) saved.length = 0;
+    saved.forEach(addRule);
+    // 0.33.0 (owner): every myaddr name with the use "entry" gets its own section, ready to save
+    S.rulesCtx.entries.filter((e) => !saved.some((x) => x.entry === e)).forEach((e) => addRule({ entry: e, sub: "", to: "", auto: true }));
+    if (!$("r-rules").children.length) addRule();
     S.provSum();
     try { $("r-text").value = (await api("GET", "/api/redirect/script")).script; } catch (e) {}
     const g = r.gen || {};
@@ -1410,11 +1424,13 @@ async function refreshRedirect() {
   }
   $("r-token-state").textContent = r.cf.token_set ? tx("js.gespeichert") : "";
   $("r-pub").textContent = r.ssh_public_key || tx("js.noch_kein_schlussel");
+  $("r-pub-sum").textContent = r.ssh_public_key ? r.ssh_public_key.split(" ").slice(0, 1).join("") + " …" + r.ssh_public_key.split(" ")[1].slice(-12) : tx("js.noch_kein_schlussel");
   dot("r-dot", LCLASS[L.redirect] || "");
   $("r-state").innerHTML = dl(redirectRows(r).concat([r.last_rc !== null && r.last_rc !== undefined && r.provider === "script" ? [tx("js.exit_code"), String(r.last_rc)] : null]));
   S.rulesPort = (/:(\d+)$/.exec(r.target || "") || [])[1] || "";
   if (S.rulesCtx) Object.assign(S.rulesCtx, { active: r.active_name || "", bound: r.profile_names || [] });
-  document.querySelectorAll("#r-rules tr").forEach(rulePreview);
+  S.redirState = r;
+  document.querySelectorAll("#r-rules .xurl").forEach(rulePreview);
   $("r-out").textContent = (r.last_output || []).join("\n") || "-";
 }
 // ---- script generator (0.16.0) ----
@@ -1457,7 +1473,7 @@ document.querySelectorAll("button[data-example]").forEach((btn) => btn.addEventL
 $("r-save").addEventListener("click", (ev) => busy(ev.target, async () => {
   const body = { provider: document.querySelector("input[name=r-prov]:checked").value, mode: $("r-mode").value, status: Number($("r-status").value), fixed_port: $("r-port").value.trim(),
     cf: { zone: $("r-zone").value.trim(), token: $("r-token").value.trim() }, gen: genOf(),
-    rules: [...document.querySelectorAll("#r-rules tr")].map(ruleOf), providers: [...document.querySelectorAll("#r-provs .xprov")].map(provOf) };
+    rules: [...document.querySelectorAll("#r-rules .xurl")].map(ruleOf), providers: [...document.querySelectorAll("#r-provs .xprov")].map(provOf) };
   if (body.provider === "script" && !body.gen.kind) body.script = $("r-text").value;
   if (body.provider !== "script") delete body.gen;
   const main = body.rules.shift() || { entry: "", sub: "", to: "" };
@@ -1529,7 +1545,7 @@ $("p-test").addEventListener("click", (ev) => busy(ev.target, async () => {
 
 // ---- rewrite rules and further myaddr names (rows edited in place) -------------------------
 function delBtn() { return '<button type="button" data-del>' + esc(tx("js.loschen")) + "</button>"; }
-document.addEventListener("click", (ev) => { const b = ev.target.closest("button[data-del]"); if (b) b.closest("tr").remove(); });
+document.addEventListener("click", (ev) => { const b = ev.target.closest("button[data-del]"); if (b) { ev.preventDefault(); b.closest("tr, .xurl").remove(); } });
 function viaOptions(sel, keep) {
   const v = keep !== undefined ? keep : sel.value, n = document.querySelectorAll("#r-provs .xprov").length;
   sel.innerHTML = '<option value="">' + esc(tx("redirect.anbieter_haupt")) + "</option>" +
@@ -1552,33 +1568,52 @@ function rulePreview(tr) {
   tr.querySelector(".rr-follow").textContent = follows ? tx("js.folgt_aktivem_profil") : "";
   const custom = tr.querySelector(".rr-entry-sel").value === "custom";
   tr.querySelector(".rr-entry").classList.toggle("hidden", !custom); tr.querySelector(".rr-esub").classList.toggle("hidden", custom);
-  tr.querySelector(".rr-out").textContent = r.entry ? "https://" + (sub ? sub + "." : "") + base + ":" + (S.rulesPort || "<Port>") : "-";
+  const out = r.entry ? "https://" + (sub ? sub + "." : "") + base + ":" + (S.rulesPort || "<Port>") : "-";
+  tr.querySelector(".rr-out").textContent = out;
+  if (!tr.classList.contains("xurl")) return;
+  // summary: entry -> target, via which provider, and its state
+  const rs = S.redirState || {}, saved = (rs.mappings || []).some((m) => m.entry === r.entry && (m.via || "") === r.via);
+  const p = r.via ? (rs.providers || []).find((x) => x.id === r.via) : rs.provider ? rs : null;
+  const err = p && p.last_error, ok = p && p.last_ok && !err;
+  const viaText = r.via ? provLabel(r.via) : tx("redirect.anbieter_1");
+  tr.querySelector(".ux-title").textContent = r.entry || tx("redirect.neue_start_url");
+  tr.querySelector(".ux-sub").textContent = "→ " + out + " · " + tx("redirect.uber_anbieter").replace("{p}", viaText) +
+    (!saved ? " · " + tx(tr.dataset.auto ? "redirect.neu_aus_namen" : "redirect.nicht_gespeichert") : "");
+  tr.querySelector(".ux-dot").className = "dot ux-dot " + (!saved || !p ? "" : err ? "err" : ok ? "ok" : "");
+  tr.querySelector(".ux-state").textContent = !saved || !p ? "" : err ? tx("js.fehler_3") + err : ok ? tx("js.ok") + age(p.last_ok) : "";
 }
 function addRule(r) {
   const ctx = S.rulesCtx || { endpoints: [], entries: [] }, first = !$("r-rules").children.length;
   const entries = ctx.entries;  // 0.23.0: subdomain (or * for any) in its own field (owner)
   const opt = (v, t) => '<option value="' + esc(v) + '">' + esc(t || v) + "</option>";
-  const tr = document.createElement("tr");
-  tr.innerHTML = '<td><div class="rr-epair"><input type="text" class="rr-esub" spellcheck="false" placeholder="' + esc(tx(first ? "js.regel_eingang_sub_ph1" : "js.regel_eingang_sub_ph")) + '">' +
+  const lab = (k) => "<label>" + esc(tx(k)) + "</label>";
+  // 0.33.0 (owner): every start URL is a section of its own
+  const d = document.createElement("details");
+  d.className = "xurl"; d.open = !!(r && r.auto) || !r;
+  d.innerHTML = '<summary><span class="dot ux-dot"></span><span class="ux-title"></span>' + (first ? '<span class="muted small">' + esc(tx("js.haupteingang")) + "</span>" : delBtn()) +
+    '<span class="muted small ux-sub"></span></summary>' +
+    '<div class="cols"><div>' + lab("redirect.regel_eingang") + '<div class="rr-epair"><input type="text" class="rr-esub" spellcheck="false" placeholder="' + esc(tx(first ? "js.regel_eingang_sub_ph1" : "js.regel_eingang_sub_ph")) + '">' +
     '<select class="rr-entry-sel">' + entries.map((e) => opt(e)).join("") + opt("custom", tx("js.eigener_host")) + "</select></div>" +
-    '<input type="text" class="rr-entry" spellcheck="false" placeholder="start.example.ch' + (first ? "" : " / *.example.ch") + '"></td>' +
-    '<td><input type="text" class="rr-sub" spellcheck="false" placeholder="' + esc(tx("js.regel_ziel_placeholder")) + '"></td>' +
-    '<td><select class="rr-to">' + ctx.endpoints.map((e, i) => opt(i ? e : "", ctx.active && !i ? tx("js.aktives_profil") : e + (i ? "" : " (" + tx("js.hauptname") + ")"))).join("") + "</select></td>" +
-    '<td><select class="rr-via"' + (first ? " disabled" : "") + "></select></td>" +
-    '<td class="small"><span class="rr-out"></span><span class="muted small rr-follow" style="display:block"></span></td><td>' + (first ? '<span class="muted small">' + esc(tx("js.haupteingang")) + "</span>" : delBtn()) + "</td>";
+    '<input type="text" class="rr-entry" spellcheck="false" placeholder="start.example.ch' + (first ? "" : " / *.example.ch") + '"></div>' +
+    "<div>" + lab("redirect.regel_ziel") + '<input type="text" class="rr-sub" spellcheck="false" placeholder="' + esc(tx("js.regel_ziel_placeholder")) + '"></div>' +
+    "<div>" + lab("redirect.regel_ziel_name") + '<select class="rr-to">' + ctx.endpoints.map((e, i) => opt(i ? e : "", ctx.active && !i ? tx("js.aktives_profil") : e + (i ? "" : " (" + tx("js.hauptname") + ")"))).join("") + "</select></div>" +
+    "<div>" + lab("redirect.regel_uber") + '<select class="rr-via"' + (first ? " disabled" : "") + "></select></div></div>" +
+    '<p class="small">' + esc(tx("redirect.regel_ergebnis")) + ': <span class="rr-out"></span> <span class="muted small rr-follow"></span></p>' +
+    '<p class="small ux-state"></p>';
   const entry = (r && r.entry) || "";
-  const sel = tr.querySelector(".rr-entry-sel");
+  const sel = d.querySelector(".rr-entry-sel");
   // split "app.eingang-muster.myaddr.io" into subdomain "app" and the name "eingang-muster.myaddr.io"
   const base = entries.find((e) => entry === e) || entries.filter((e) => entry.endsWith("." + e)).sort((a, b) => b.length - a.length)[0];
   sel.value = base ? base : entry ? "custom" : (entries[0] || "custom");
-  tr.querySelector(".rr-esub").value = base && entry !== base ? entry.slice(0, -base.length - 1) : "";
-  tr.querySelector(".rr-entry").value = base ? "" : entry;
-  tr.querySelector(".rr-sub").value = (r && r.sub) || "";
-  tr.querySelector(".rr-to").value = (r && r.to) || "";
-  viaOptions(tr.querySelector(".rr-via"), (r && r.via) || "");
-  tr.addEventListener("input", () => rulePreview(tr)); tr.addEventListener("change", () => { rulePreview(tr); if (S.provSum) S.provSum(); });
-  $("r-rules").appendChild(tr);
-  rulePreview(tr);
+  d.querySelector(".rr-esub").value = base && entry !== base ? entry.slice(0, -base.length - 1) : "";
+  d.querySelector(".rr-entry").value = base ? "" : entry;
+  d.querySelector(".rr-sub").value = (r && r.sub) || "";
+  d.querySelector(".rr-to").value = (r && r.to) || "";
+  d.dataset.auto = r && r.auto ? "1" : "";
+  viaOptions(d.querySelector(".rr-via"), (r && r.via) || "");
+  d.addEventListener("input", () => rulePreview(d)); d.addEventListener("change", () => { rulePreview(d); if (S.provSum) S.provSum(); });
+  $("r-rules").appendChild(d);
+  rulePreview(d);
 }
 $("r-rule-add").addEventListener("click", () => addRule());
 document.addEventListener("click", (ev) => { if (ev.target.closest("#r-rules button[data-del]") && S.provSum) setTimeout(S.provSum, 0); });
@@ -1620,7 +1655,7 @@ function addProv(x) {
 }
 function numberProvs() {
   refreshVia();
-  const rules = [...document.querySelectorAll("#r-rules tr")].map(ruleOf);
+  const rules = [...document.querySelectorAll("#r-rules .xurl")].map(ruleOf);
   document.querySelectorAll("#r-provs .xprov").forEach((d, i) => {
     d.querySelector(".xp-title").textContent = tx("redirect.anbieter_n").replace("{n}", String(i + 2));
     // collapsed: its type and the start URLs that go via it
@@ -1643,12 +1678,18 @@ function provOf(d, i) {
   return x;
 }
 $("r-prov-add").addEventListener("click", () => addProv());
-S.provSum = () => document.querySelectorAll("#r-provs .xprov").forEach((d, i) => {
+S.provSum = () => {
+  const p1 = document.querySelector("input[name=r-prov]:checked").value;
+  const u1 = [...document.querySelectorAll("#r-rules .xurl")].map(ruleOf).filter((r) => !r.via && r.entry).map((r) => r.entry);
+  $("r-p1-sum").textContent = (p1 === "cloudflare" ? tx("redirect.cloudflare") : p1 === "script" ? tx("redirect.skript") : tx("redirect.aus")) + " · " + (u1.length ? u1.join(", ") : tx("redirect.anbieter_keine_url"));
+  provSum2();
+};
+const provSum2 = () => document.querySelectorAll("#r-provs .xprov").forEach((d, i) => {
   const sel = d.querySelector(".xp-art"), via = d.dataset.id || "new" + i;
-  const urls = [...document.querySelectorAll("#r-rules tr")].map(ruleOf).filter((r) => r.via === via && r.entry).map((r) => r.entry);
+  const urls = [...document.querySelectorAll("#r-rules .xurl")].map(ruleOf).filter((r) => r.via === via && r.entry).map((r) => r.entry);
   d.querySelector(".xp-sum").textContent = sel.options[sel.selectedIndex].text + " · " + (urls.length ? urls.join(", ") : tx("redirect.anbieter_keine_url"));
 });
-["r-save2", "r-save3", "r-save4"].forEach((id) => $(id).addEventListener("click", () => $("r-save").click()));
+["r-save2", "r-save3"].forEach((id) => $(id).addEventListener("click", () => $("r-save").click()));
 const DOMAINS = ["myaddr.tools", "myaddr.dev", "myaddr.io"];
 function fillNames(st) {
   const m = st.myaddr || {}, d = st.ddns || {};
