@@ -536,5 +536,8 @@
  "js.cpu_portnook": "portnook selbst: {p} % eines Kerns",
  "js.schlussel_anzeigen": "Anzeigen",
  "js.passwort_erneut": "portnook-Passwort",
- "js.schlussel_vom_namen": "vom gleichen Namen"
+ "js.schlussel_vom_namen": "vom gleichen Namen",
+ "redirect.ausgleich": "Nach Last ausgleichen",
+ "redirect.ausgleich_hint": "Alle 30 Minuten vergleicht portnook die neuen Verbindungen pro Tunnel. Bekommt ein Tunnel deutlich mehr als seinen Anteil, gibt er einen Teil der Clients an den schwächsten ab (Gewicht 1 bis 4, ein Schritt pro Runde). Verschobene Clients landen auf einem anderen Tunnel und müssen sich dort eventuell neu anmelden.",
+ "redirect.anteile": "Anteile"
 }

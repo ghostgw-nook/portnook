@@ -572,5 +572,14 @@ class RoundRobinGeneratorTest(unittest.TestCase):
         self.assertIn("'https://$1.b.myaddr.io:42000'", text)
 
 
+class WeightedTest(unittest.TestCase):
+    def test_weighted_targets(self):
+        from app.redirect import weighted, htaccess
+        self.assertEqual(weighted(["a", "b"], [2, 2]), ["a", "b"])
+        self.assertEqual(weighted(["a", "b", "c"], [1, 2, 4]), ["a", "b", "b", "c", "c", "c", "c"])
+        text = htaccess([("start.example.ch", weighted(["https://a:1", "https://b:2"], [1, 3]))], 302)
+        self.assertEqual(text.count("https://b:2"), 3)
+
+
 if __name__ == "__main__":
     unittest.main()

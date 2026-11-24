@@ -508,6 +508,30 @@ class FourTunnelsTest(unittest.TestCase):
         urls = self.agent.redirect.mappings_via(self.agent.redirect.cfg(), self.agent.redirect.target())[0][1]
         self.assertEqual(urls, ["https://tv.familie-muster.myaddr.tools:51234", "https://tv.muster-2.myaddr.tools:40000",
                                 "https://tv.muster-3.myaddr.tools:42000", "https://tv.muster-4.myaddr.tools:43000"])
+        # 0.39.0: balance by load: the busy tunnel gives a step away, every generator sees the weights
+        rd = self.agent.redirect
+        rd.set_config(dict(rd.status(), provider="script", mode="roundrobin", balance=True, script="exit 0\n", entry_host="start.example.ch",
+                           rules=[], providers=[], gen={"kind": ""}, cf={}))
+        self.assertTrue(rd.cfg()["balance"])
+        self.agent.usage.total.update({"p1": 0, "p2": 0, "p3": 0, "p4": 0})
+        self.agent.usage.sample = lambda: None
+        self.assertIsNone(rd.balance())  # first round: only the base
+        self.agent.usage.total.update({"p1": 70, "p2": 10, "p3": 10, "p4": 10})
+        self.assertIsNone(rd.balance())  # not yet 30 min
+        self.now[0] += 1800
+        self.assertEqual(rd.balance(), {"p1": 1, "p2": 2, "p3": 2, "p4": 2})
+        urls = rd.mappings_via(rd.cfg(), rd.target())[0][1]
+        self.assertEqual(urls, ["https://tv.familie-muster.myaddr.tools:51234"] + [
+            u for u in ("https://tv.muster-2.myaddr.tools:40000", "https://tv.muster-3.myaddr.tools:42000",
+                        "https://tv.muster-4.myaddr.tools:43000") for _ in (1, 2)])
+        self.assertEqual([x["share"] for x in rd.status()["shares"]], [14, 29, 29, 29])
+        self.assertEqual(len(rd.status()["mappings"][0]["targets"]), 4)  # shown once each
+        self.now[0] += 1800
+        self.agent.usage.total.update({"p1": 75, "p2": 15, "p3": 15, "p4": 15})  # 20 new: too few to change
+        self.assertIsNone(rd.balance())
+        rd.set_config(dict(rd.status(), provider="script", mode="roundrobin", balance=False, script="exit 0\n", entry_host="start.example.ch",
+                           rules=[], providers=[], gen={"kind": ""}, cf={}))
+        self.assertEqual(len(rd.mappings_via(rd.cfg(), rd.target())[0][1]), 4)
         # activating the profile of reserve 3 promotes it, the other reserves stay untouched
         self.fake.calls.clear()
         res = self.fo.activate("p4")

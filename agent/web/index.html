@@ -519,6 +519,9 @@ h3 { font-size: 14px; margin: 16px 0 4px; }
         <option value="failover">{{redirect.modus_failover}}</option>
         <option value="roundrobin">{{redirect.modus_roundrobin}}</option></select></div>
     </div>
+    <label class="inline" id="r-balance-row"><input type="checkbox" id="r-balance"> {{redirect.ausgleich}}</label>
+    <p class="hint" id="r-balance-hint">{{redirect.ausgleich_hint}}</p>
+    <p class="small" id="r-shares"></p>
     <div class="hint" id="r-mode-hint">{{redirect.modus_hint}}</div>
     <details class="help"><summary>{{ui.erweitert}}</summary>
       <div class="cols">
@@ -1419,7 +1422,7 @@ async function refreshRedirect() {
     S.redirFilled = true;
     document.querySelector('input[name=r-prov][value="' + (r.provider || "") + '"]').checked = true;
     $("r-status").value = String(r.status || 302);
-    $("r-mode").value = r.mode || "failover";
+    $("r-mode").value = r.mode || "failover"; $("r-balance").checked = !!r.balance;
     $("r-port").value = r.fixed_port || ""; $("r-zone").value = r.cf.zone || "";
     S.rulesCtx = { active: r.active_name || "", bound: r.profile_names || [], endpoints: r.endpoints || [], entries: (st.names || []).filter((n) => n.role === "entry").sort(byNameOrder).map((n) => n.name + "." + n.domain) };
     S.redirState = r;
@@ -1442,6 +1445,11 @@ async function refreshRedirect() {
   S.redirState = r;
   document.querySelectorAll("#r-groups .xurl").forEach(groupPreview);
   $("r-out").textContent = (r.last_output || []).join("\n") || "-";
+  // 0.39.0: share of the clients per tunnel in the round robin
+  const rrOn = $("r-mode").value === "roundrobin";
+  ["r-balance-row", "r-balance-hint", "r-shares"].forEach((id) => $(id).classList.toggle("hidden", !rrOn));
+  $("r-shares").textContent = (r.shares || []).length ? tx("redirect.anteile") + ": " +
+    r.shares.map((x) => (x.name || x.profile) + " " + x.share + " %").join(" · ") : "";
 }
 // ---- script generator (0.16.0) ----
 function genOf() {
@@ -1464,6 +1472,8 @@ function toggleGen(preview) {
   $("g-prev-label").textContent = tx(gen ? "gen.vorschau" : "gen.skript");
   if (gen && preview) genPreview();
 }
+$("r-mode").addEventListener("change", () => ["r-balance-row", "r-balance-hint", "r-shares"].forEach((id) =>
+  $(id).classList.toggle("hidden", $("r-mode").value !== "roundrobin")));
 let genWas = "";
 $("g-kind").addEventListener("focus", () => { genWas = $("g-kind").value; });
 $("g-kind").addEventListener("change", async () => {
@@ -1490,7 +1500,7 @@ document.querySelectorAll("button[data-example]").forEach((btn) => btn.addEventL
   try { $("r-text").value = (await api("GET", "/api/redirect/example/" + btn.dataset.example)).script; } catch (e) { msg("r-msg", "err", esc(e.message)); }
 }));
 $("r-save").addEventListener("click", (ev) => busy(ev.target, async () => {
-  const body = Object.assign({ provider: document.querySelector("input[name=r-prov]:checked").value, mode: $("r-mode").value, status: Number($("r-status").value), fixed_port: $("r-port").value.trim(),
+  const body = Object.assign({ provider: document.querySelector("input[name=r-prov]:checked").value, mode: $("r-mode").value, balance: $("r-balance").checked, status: Number($("r-status").value), fixed_port: $("r-port").value.trim(),
     cf: { zone: $("r-zone").value.trim(), token: $("r-token").value.trim() }, gen: genOf() }, groupsBody());
   if (body.provider === "script" && !body.gen.kind) body.script = $("r-text").value;
   if (body.provider !== "script") delete body.gen;

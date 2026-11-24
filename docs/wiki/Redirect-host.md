@@ -1,6 +1,6 @@
 # Redirect host
 
-> **Applies to:** portnook 0.36 (rc1) · [Versions](Versions)
+> **Applies to:** portnook 0.39 (rc1) · [Versions](Versions)
 
 The VPN port changes now and then, and a URL with a port is hard to remember. A **redirect host** is a fixed
 address, e.g. `https://start.example.com`, that answers with a **302** to the current
@@ -55,10 +55,10 @@ zone**. portnook uploads a Worker named `tv` and switches it on at workers.dev; 
 needed. The token needs only **Account → Workers Scripts → Edit**. Only that exact address works (no `app.` or
 `*.` in front). It works in failover and in round robin.
 
-## Round robin (share clients between both tunnels)
+## Round robin (share clients between the tunnels)
 
-**Redirect** → **Mode** → **Share clients (round robin)**: the clients are spread by their IP over the active and
-the standby tunnel; one client always gets the same tunnel. Each tunnel needs its own connection name (see
+**Redirect** → **Mode** → **Share clients (round robin)**: the clients are spread by their IP over the active
+tunnel and the reserves (up to 4 tunnels since 0.37); one client always gets the same tunnel. Each tunnel needs its own connection name (see
 [VPN profiles and failover](VPN-profiles-and-failover)); if the standby fails, it is taken out until it is ready
 again.
 
@@ -71,6 +71,19 @@ again.
   **Account → Workers Scripts → Edit**. The free Workers plan is enough for home use (100 000 requests a day).
 - Back to **Only active tunnel (failover)**: portnook removes its Worker routes and sets the redirect rule again.
   The Worker script itself stays in your account, unused; delete it there if you like.
+
+How the IP picks the tunnel: `index.php` and the Worker use a hash of the whole address (even shares).
+`.htaccess` cannot calculate, it only looks at the last character of the address; with IPv4 that is a digit, so
+with 3 tunnels the shares are about 40/30/30 %, with 4 about 30/30/20/20 %.
+
+### Even out by load (0.39)
+
+**Even out by load** (under the mode, round robin only): every 30 minutes portnook compares the new connections
+per tunnel (see the tunnel tiles) with each tunnel's share. A tunnel that got clearly more than its share (1.5×)
+gives one step of weight away; otherwise the one far below (0.67×) gets one more. Weights go from 1 to 4, one
+step per round and only with at least 30 new connections in the period. **Shares** under the switch shows the
+current split. A change moves part of the clients to another tunnel, where they may have to log in again; that is
+why it changes slowly. Switching it off goes back to equal shares.
 
 ## Script (e.g. web hosting via SSH)
 

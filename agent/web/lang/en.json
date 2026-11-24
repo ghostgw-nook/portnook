@@ -536,5 +536,8 @@
  "js.cpu_portnook": "portnook itself: {p} % of one core",
  "js.schlussel_anzeigen": "Show",
  "js.passwort_erneut": "portnook password",
- "js.schlussel_vom_namen": "from the same name"
+ "js.schlussel_vom_namen": "from the same name",
+ "redirect.ausgleich": "Even out by load",
+ "redirect.ausgleich_hint": "Every 30 minutes portnook compares the new connections per tunnel. A tunnel that gets clearly more than its share hands part of the clients to the weakest one (weight 1 to 4, one step per round). Moved clients land on another tunnel and may have to log in there again.",
+ "redirect.anteile": "Shares"
 }

@@ -68,6 +68,25 @@ def _urls(url):
     return list(url) if isinstance(url, (list, tuple)) else [url]
 
 
+WEIGHT = 2  # 0.39.0: start weight of every tunnel in the round robin (room to go down to 1)
+MAX_WEIGHT = 4
+BALANCE_EVERY = 1800  # compare the load every 30 min
+BALANCE_MIN = 30  # at least that many new connections in the period
+
+
+def weighted(urls, weights):
+    """0.39.0: a target list where each URL stands ``weight`` times (divided by their greatest common divisor), so
+    every generator (hash modulo count, address groups) gives it that share without knowing about weights."""
+    import math
+    g = 0
+    for x in weights:
+        g = math.gcd(g, max(1, int(x)))
+    out = []
+    for u, x in zip(urls, weights):
+        out += [u] * (max(1, int(x)) // (g or 1))
+    return out
+
+
 def addr_groups(n):
     """0.28.0 round robin in ``.htaccess``: the clients are split by the last character of their address into
     ``n`` groups (digits and hex letters dealt out in turn), so one client always gets the same tunnel."""
@@ -491,6 +510,10 @@ class Redirect:
         if mode not in ("failover", "roundrobin"):
             raise ValidationError("Modus: failover oder roundrobin.")
         new["mode"] = mode  # 0.31.0: round robin with Cloudflare runs as a Worker
+        # 0.39.0 (owner): round robin evened out by the new connections per tunnel
+        new["balance"] = bool(body.get("balance", cur.get("balance", False)))
+        if not new["balance"]:
+            new["weights"] = {}
         try:
             new["status"] = int(body.get("status") or 302)
         except (TypeError, ValueError):
@@ -664,6 +687,9 @@ class Redirect:
 
     def rr_reserves(self, cfg=None):
         """0.37.0: ``[(name, port)]`` of every reserve that takes part in the round robin (up to 3), slot order."""
+        return [(n, p) for n, p, _ in self._rr_reserves(cfg)]
+
+    def _rr_reserves(self, cfg=None):
         cfg = cfg if cfg is not None else self.cfg()
         if cfg.get("mode") != "roundrobin" or not self.agent._proton_on():
             return []
@@ -672,9 +698,61 @@ class Redirect:
             if not sb.state.get("profile") or not sb.health()[0]:
                 continue
             name, ports = self.agent.tunnel_fqdn(sb.role), sb.ports()
-            if name and ports and name != own and name not in [n for n, _ in out]:
-                out.append((name, int(ports[0])))
+            if name and ports and name != own and name not in [n for n, _, _ in out]:
+                out.append((name, int(ports[0]), sb.state["profile"]))
         return out
+
+    # -- 0.39.0 (owner): round robin evened out by load --------------------------
+    def weights(self, cfg=None):
+        """``{profile id: weight}`` while the balance is on (round robin), else ``{}``; missing = ``WEIGHT``."""
+        cfg = cfg if cfg is not None else self.cfg()
+        if not cfg.get("balance") or cfg.get("mode") != "roundrobin":
+            return {}
+        return {str(k): int(v) for k, v in (cfg.get("weights") or {}).items()}
+
+    def balance(self, cfg=None):
+        """Every ``BALANCE_EVERY`` s: compare the new connections per tunnel with its share of the clients.
+        The tunnel that got far more than its share gives one step away, else the one far below gets one more
+        (weights 1..``MAX_WEIGHT``, one step per period, at least ``BALANCE_MIN`` connections). A change moves a
+        part of the clients to another tunnel, so it happens seldom."""
+        cfg = cfg if cfg is not None else self.cfg()
+        if not cfg.get("balance") or cfg.get("mode") != "roundrobin":
+            self.rt.pop("balance_base", None)
+            return None
+        now = int(self.clock())
+        if now - self.rt.get("balance_at", 0) < BALANCE_EVERY:
+            return None
+        act = (self.agent.active_profile() or {}).get("id")
+        pids = ([act] if act else []) + [p for _, _, p in self._rr_reserves(cfg)]
+        try:
+            self.agent.usage.sample()
+        except Exception:
+            pass
+        totals = dict(getattr(self.agent.usage, "total", {}) or {})
+        base = self.rt.get("balance_base")
+        self.rt.update({"balance_at": now, "balance_base": totals})
+        if base is None or len(pids) < 2:
+            return None
+        new = {p: max(0, totals.get(p, 0) - base.get(p, 0)) for p in pids}
+        n = sum(new.values())
+        if n < BALANCE_MIN:
+            return None
+        cur = self.weights(cfg)
+        w = {p: cur.get(p, WEIGHT) for p in pids}
+        total_w = float(sum(w.values()))
+        ratio = {p: (new[p] / float(n)) / (w[p] / total_w) for p in pids}
+        hi, lo = max(pids, key=ratio.get), min(pids, key=ratio.get)
+        if ratio[hi] > 1.5 and w[hi] > 1:
+            w[hi] -= 1
+        elif ratio[lo] < 0.67 and w[lo] < MAX_WEIGHT:
+            w[lo] += 1
+        else:
+            return None
+        weights = dict(cur, **w)
+        self.agent.store.update("redirect", {"weights": weights})
+        log("redirect balance: new connections %s -> weights %s",
+            ", ".join("%s %d" % (p, new[p]) for p in pids), ", ".join("%s %d" % (p, w[p]) for p in pids))
+        return weights
 
     def rr_state(self, cfg=None):
         """Why the round robin does (not) share right now, for the UI."""
@@ -697,12 +775,14 @@ class Redirect:
         """``[(entry host, [target URLs])]``. One URL per rule, or (round robin, 0.28.0) one per tunnel for rules
         that follow the profile names: the active tunnel first, then the standby. Fixed names stay single."""
         own = self.active_name()
-        tunnels = [(own, tgt["port"])]
-        tunnels += self.rr_reserves(cfg) if rr else []  # 0.37.0: every ready reserve with a name
+        act = (self.agent.active_profile() or {}).get("id", "") if rr else ""
+        tunnels = [(own, tgt["port"], act)]
+        tunnels += self._rr_reserves(cfg) if rr else []  # 0.37.0: every ready reserve with a name
+        w = self.weights(cfg) if rr else {}
 
         def urls(to, sub, first_url=None):
-            out = []
-            for i, (name, port) in enumerate(tunnels):
+            out, owner = [], {}
+            for i, (name, port, pid) in enumerate(tunnels):
                 base = self.base_for(to, name) if (name or i == 0) else None
                 if base is None:
                     continue
@@ -710,7 +790,8 @@ class Redirect:
                 u = first_url if (i == 0 and first_url) else "https://%s:%d" % (host, port)
                 if u not in out:
                     out.append(u)
-            return out
+                    owner[u] = pid
+            return weighted(out, [w.get(owner[u], WEIGHT) for u in out]) if w and len(out) > 1 else out
 
         out = [(cfg.get("entry_host", ""), urls(cfg.get("to"), cfg.get("sub"), tgt["url"]), "")]
         # fixed hosts before *.host, so app.eingang-muster... wins over *.eingang-muster... (0.23.0)
@@ -973,6 +1054,10 @@ class Redirect:
         return self.agent.egress.tunnel_up() or not self.agent._proton_on()
 
     def tick(self):
+        try:
+            self.balance()
+        except Exception as err:  # the balance never stops the redirect
+            log("redirect balance failed: %s", err)
         return self.apply()
 
     def status(self):
@@ -991,9 +1076,24 @@ class Redirect:
                 "rules": cfg.get("rules") or [], "to": cfg.get("to", ""), "endpoints": self.endpoints(),
                 "active_name": self.active_name(), "profile_names": sorted(self.profile_names()),
                 "mode": cfg.get("mode", "failover"), "rr": self.rr_state(cfg),
+                "balance": bool(cfg.get("balance")), "shares": self.shares(cfg),
                 "providers": [self._provider_status(x, cfg) for x in cfg.get("providers") or []],
-                "mappings": [{"entry": e, "target": u[0], "targets": u, "via": v}
+                "mappings": [{"entry": e, "target": u[0], "targets": list(dict.fromkeys(u)), "via": v}
                              for e, u, v in self.mappings_via(cfg, tgt)] if tgt else []}
+
+    def shares(self, cfg=None):
+        """0.39.0: ``[{"profile", "name", "weight", "share"}]`` of the tunnels in the round robin (share in %)."""
+        cfg = cfg if cfg is not None else self.cfg()
+        if cfg.get("mode") != "roundrobin":
+            return []
+        act = (self.agent.active_profile() or {}).get("id")
+        rows = ([(self.active_name(), act)] if act else []) + [(n, p) for n, _, p in self._rr_reserves(cfg)]
+        if len(rows) < 2:
+            return []
+        w = self.weights(cfg)
+        ws = [w.get(p, WEIGHT) for _, p in rows]
+        return [{"profile": p, "name": n, "weight": x, "share": round(100.0 * x / sum(ws))}
+                for (n, p), x in zip(rows, ws)]
 
     def _provider_status(self, x, cfg):
         st = (cfg.get("xstate") or {}).get(x["id"]) or {}
