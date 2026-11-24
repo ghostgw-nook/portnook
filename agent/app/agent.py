@@ -615,6 +615,7 @@ class Agent:
             self.net.proton_down()
             self.net.policy_apply(None, [])
             self.lanproxy.stop()
+            self.tunnelproxy.stop()
             self.net.firewall_clear()
             self.net.clear_routes()
             self._proton_applied = ""

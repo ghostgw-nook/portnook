@@ -58,6 +58,7 @@ class _Relay:
         self.upstream_device = upstream_device
         self._lock = threading.Lock()
         self._listeners = {}  # (device, ip, port) -> socket
+        self._ifindex = {}  # (device, ip, port) -> index of the device when the listener was bound (0.36.1)
         self._backend = None  # (ip, port)
         self._slots = threading.BoundedSemaphore(max_conns)
         self.proxy_protocol = False
@@ -72,12 +73,23 @@ class _Relay:
         with self._lock:
             self._backend = (str(backend[0]), int(backend[1])) if backend else None
             self.proxy_protocol = bool(proxy_protocol)
-            for key in [k for k in self._listeners if k not in wanted]:
+            # 0.36.1: a rebuilt tunnel is a new device with a new index; a listener bound to the old one
+            # never sees a connection again, so it is opened anew
+            stale = [k for k in self._listeners if k in wanted and self._ifindex.get(k) != self._index(k)]
+            for key in [k for k in self._listeners if k not in wanted] + stale:
                 self._close(key)
             names = {self._name(k) for k in wanted}
             self.errors = {k: v for k, v in self.errors.items() if k in names}
             for key in sorted(wanted - set(self._listeners), key=lambda k: (k[0] or "", k[1], k[2])):
                 self._open(key)
+
+    def _index(self, key):
+        if not (key[0] and self.bind_devices):
+            return 0
+        try:
+            return socket.if_nametoindex(key[0])
+        except OSError:
+            return -1
 
     def _open(self, key):
         device, ip, port = key
@@ -94,10 +106,12 @@ class _Relay:
             return
         self.errors.pop(self._name(key), None)
         self._listeners[key] = sock
+        self._ifindex[key] = self._index(key)
         threading.Thread(target=self._accept, args=(sock,), name="%s-%d" % (self.what, port), daemon=True).start()
 
     def _close(self, key):
         sock = self._listeners.pop(key)
+        self._ifindex.pop(key, None)
         try:
             sock.shutdown(socket.SHUT_RDWR)  # wakes the accept() of its thread
         except OSError:

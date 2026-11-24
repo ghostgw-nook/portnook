@@ -4,6 +4,7 @@ import time
 import unittest
 
 import struct
+from unittest import mock
 
 from app.lanproxy import PP2_SIGNATURE, LanProxy, TunnelProxy, proxy_v2_header
 
@@ -166,6 +167,26 @@ class ProxyProtocolRelayTest(unittest.TestCase):
             socket.create_connection(("127.0.0.1", p1), timeout=2).close()
         proxy.stop()
         self.assertEqual(proxy.listening(), [])
+
+    def test_rebuilt_tunnel_gets_a_new_listener(self):
+        """0.36.1: a rebuilt wg0 has a new interface index; the listener bound to the old one is opened anew."""
+        index = {"wg0": 7}
+        proxy = TunnelProxy(upstream_device=None, bind_any="127.0.0.1")
+        self.addCleanup(proxy.stop)
+        backend = EchoServer(b"")
+        self.addCleanup(backend.close)
+        port = free_port()
+        with mock.patch("app.lanproxy._bind_lan"), \
+                mock.patch("app.lanproxy.socket.if_nametoindex", side_effect=lambda n: index[n]):
+            proxy.update([("wg0", [port])], ("127.0.0.1", backend.port))
+            first = proxy._listeners[("wg0", "127.0.0.1", port)]
+            proxy.update([("wg0", [port])], ("127.0.0.1", backend.port))
+            self.assertIs(proxy._listeners[("wg0", "127.0.0.1", port)], first)  # same tunnel: kept
+            index["wg0"] = 9  # tunnel_down + tunnel_up
+            proxy.update([("wg0", [port])], ("127.0.0.1", backend.port))
+            self.assertIsNot(proxy._listeners[("wg0", "127.0.0.1", port)], first)
+            self.assertEqual(first.fileno(), -1)
+        self.assertEqual(parse_v2(roundtrip(port, b"hi"))[2], b"hi")
 
 
 if __name__ == "__main__":
