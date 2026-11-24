@@ -353,6 +353,7 @@
  "redirect.anbieter_hinzufugen": "Anbieter hinzufügen",
  "redirect.anbieter_n": "Anbieter {n}",
  "redirect.anbieter_haupt": "Anbieter 1 (oben)",
+ "redirect.anbieter_keine_url": "noch keine Start-URL",
  "redirect.anbieter_art": "Art",
  "redirect.zone_zone_id_oder_domain": "Zone (Zone-ID oder Domain)",
  "settings.anzeige": "Anzeige",

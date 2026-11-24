@@ -100,7 +100,9 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .msg.ok { border-color: var(--ok); } .msg.err { border-color: var(--err); } .msg.warn { border-color: var(--warn); }
 .msg dl { margin-top: 6px; }
 .xprov { border: 1px solid var(--line, #8884); border-radius: 8px; padding: 10px 12px; margin: 10px 0; }
-.xprov h3 { margin-top: 0; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.xprov > summary { cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 8px; font-weight: 600; }
+.xprov > summary .xp-sum { font-weight: 400; overflow-wrap: anywhere; flex: 1; }
+.xprov[open] > summary { margin-bottom: 8px; }
 .rr-epair { display: flex; gap: 6px; } .rr-epair .rr-esub { flex: 0 0 38%; min-width: 70px; }
 pre.log { background: var(--code); border-radius: 7px; padding: 10px; max-height: 340px; overflow: auto; font-size: 12px;
   margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -1397,6 +1399,7 @@ async function refreshRedirect() {
     (r.providers || []).forEach(addProv);
     $("r-rules").innerHTML = "";
     [{ entry: r.entry_host, sub: r.sub, to: r.to }].concat(r.rules || []).forEach(addRule);
+    S.provSum();
     try { $("r-text").value = (await api("GET", "/api/redirect/script")).script; } catch (e) {}
     const g = r.gen || {};
     $("g-kind").value = g.kind || (r.provider === "script" ? "" : "htaccess");
@@ -1573,19 +1576,20 @@ function addRule(r) {
   tr.querySelector(".rr-sub").value = (r && r.sub) || "";
   tr.querySelector(".rr-to").value = (r && r.to) || "";
   viaOptions(tr.querySelector(".rr-via"), (r && r.via) || "");
-  tr.addEventListener("input", () => rulePreview(tr)); tr.addEventListener("change", () => rulePreview(tr));
+  tr.addEventListener("input", () => rulePreview(tr)); tr.addEventListener("change", () => { rulePreview(tr); if (S.provSum) S.provSum(); });
   $("r-rules").appendChild(tr);
   rulePreview(tr);
 }
 $("r-rule-add").addEventListener("click", () => addRule());
+document.addEventListener("click", (ev) => { if (ev.target.closest("#r-rules button[data-del]") && S.provSum) setTimeout(S.provSum, 0); });
 // ---- further providers (0.32.0) ----
 function addProv(x) {
   x = x || { kind: "cloudflare", gen: { kind: "htaccess" } };
-  const d = document.createElement("div");
-  d.className = "xprov"; d.dataset.id = x.id || "";
+  const d = document.createElement("details");
+  d.className = "xprov"; d.dataset.id = x.id || ""; d.open = !x.id;
   const g = x.gen || {}, art = x.kind === "cloudflare" ? "cloudflare" : (g.kind || "own");
   const opt = (v, t) => '<option value="' + v + '">' + esc(tx(t)) + "</option>";
-  d.innerHTML = '<h3><span class="xp-title"></span><button type="button" class="xp-del">' + esc(tx("js.loschen")) + "</button></h3>" +
+  d.innerHTML = '<summary><span class="xp-title"></span><span class="muted small xp-sum"></span><button type="button" class="xp-del">' + esc(tx("js.loschen")) + "</button></summary>" +
     '<label>' + esc(tx("redirect.anbieter_art")) + '</label><select class="xp-art">' + opt("cloudflare", "redirect.cloudflare") + opt("htaccess", "gen.htaccess") +
     opt("php", "gen.php") + opt("own", "gen.eigenes") + "</select>" +
     '<div class="xp-cf cols"><div><label>' + esc(tx("redirect.zone_zone_id_oder_domain")) + '</label><input type="text" class="xp-zone" spellcheck="false" autocomplete="off"></div>' +
@@ -1609,14 +1613,21 @@ function addProv(x) {
     d.querySelector(".xp-own").classList.toggle("hidden", a !== "own");
     d.querySelector(".xp-hint").textContent = tx(a === "cloudflare" ? "redirect.token_mit_der_berechtigung_zone" : a === "own" ? "redirect.lauft_mit_bin_sh_60" : "gen.hinweis");
   };
-  d.querySelector(".xp-art").addEventListener("change", toggle);
-  d.querySelector(".xp-del").addEventListener("click", () => { d.remove(); numberProvs(); });
+  d.querySelector(".xp-art").addEventListener("change", () => { toggle(); numberProvs(); });
+  d.querySelector(".xp-del").addEventListener("click", (ev) => { ev.preventDefault(); d.remove(); numberProvs(); });
   $("r-provs").appendChild(d);
   toggle(); numberProvs();
 }
 function numberProvs() {
-  document.querySelectorAll("#r-provs .xprov").forEach((d, i) => { d.querySelector(".xp-title").textContent = tx("redirect.anbieter_n").replace("{n}", String(i + 2)); });
   refreshVia();
+  const rules = [...document.querySelectorAll("#r-rules tr")].map(ruleOf);
+  document.querySelectorAll("#r-provs .xprov").forEach((d, i) => {
+    d.querySelector(".xp-title").textContent = tx("redirect.anbieter_n").replace("{n}", String(i + 2));
+    // collapsed: its type and the start URLs that go via it
+    const sel = d.querySelector(".xp-art"), via = d.dataset.id || "new" + i;
+    const urls = rules.filter((r) => r.via === via && r.entry).map((r) => r.entry);
+    d.querySelector(".xp-sum").textContent = sel.options[sel.selectedIndex].text + " · " + (urls.length ? urls.join(", ") : tx("redirect.anbieter_keine_url"));
+  });
 }
 function provOf(d, i) {
   const a = d.querySelector(".xp-art").value, x = { id: d.dataset.id || "" };
@@ -1632,6 +1643,11 @@ function provOf(d, i) {
   return x;
 }
 $("r-prov-add").addEventListener("click", () => addProv());
+S.provSum = () => document.querySelectorAll("#r-provs .xprov").forEach((d, i) => {
+  const sel = d.querySelector(".xp-art"), via = d.dataset.id || "new" + i;
+  const urls = [...document.querySelectorAll("#r-rules tr")].map(ruleOf).filter((r) => r.via === via && r.entry).map((r) => r.entry);
+  d.querySelector(".xp-sum").textContent = sel.options[sel.selectedIndex].text + " · " + (urls.length ? urls.join(", ") : tx("redirect.anbieter_keine_url"));
+});
 ["r-save2", "r-save3", "r-save4"].forEach((id) => $(id).addEventListener("click", () => $("r-save").click()));
 const DOMAINS = ["myaddr.tools", "myaddr.dev", "myaddr.io"];
 function fillNames(st) {
