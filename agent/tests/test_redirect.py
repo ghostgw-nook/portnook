@@ -380,6 +380,33 @@ class RedirectAgentTest(unittest.TestCase):
                                "providers": [{"kind": "cloudflare", "cf": {"zone": ZONE, "token": TOKEN}}],
                                "rules": [{"entry": "*.example.org", "sub": "*", "via": "a2"}]})
 
+    def test_cloudflare_workers_dev_entry(self):
+        """0.36.0: a Cloudflare provider without zone serves workers.dev entries only, in both modes."""
+        from tests.test_cf_worker import BASE, FakeCf
+        cf = FakeCf()
+        self.r.request = cf
+        with mock.patch.dict(os.environ, {"PF_CLOUDFLARE_API": BASE}), \
+                mock.patch.object(self.r, "may_run", return_value=True):
+            self.r.set_config({"provider": "cloudflare", "entry_host": "go.familie-muster.workers.dev", "sub": "tv",
+                               "cf": {"zone": "", "token": TOKEN}, "rules": []})
+            res = self.r.apply()
+            self.assertTrue(res["ok"], res)
+            self.assertEqual(res["detail"], "go.familie-muster.workers.dev: Worker aktualisiert")
+            self.assertIn("https://tv.familie-muster.myaddr.tools:51234", cf.scripts["go"].decode())
+            self.assertEqual((cf.routes, cf.ruleset["rules"]), ([], []))
+            # an own-domain entry needs the zone
+            self.r.set_config({"provider": "cloudflare", "entry_host": "go.familie-muster.workers.dev",
+                               "cf": {"zone": ""}, "rules": [{"entry": "start.example.ch", "sub": ""}]})
+            res = self.r.apply(force=True)
+            self.assertFalse(res["ok"])
+            self.assertIn("Zone fehlt", res["error"])
+        for bad in ("*.familie-muster.workers.dev", "a.b.familie-muster.workers.dev"):
+            with self.assertRaises(ValidationError):
+                self.r.set_config({"provider": "cloudflare", "entry_host": "go.familie-muster.workers.dev", "mode": "roundrobin",
+                                   "cf": {"zone": ""}, "rules": [{"entry": bad, "sub": ""}]})
+        with self.assertRaises(ValidationError):  # workers.dev only through Cloudflare
+            self.r.set_config({"provider": "script", "entry_host": "go.familie-muster.workers.dev", "script": "true\n"})
+
     def test_rules_follow_the_active_profile(self):
         """0.23.1: after a failover every rule uses the active profile's name (its port is the active one)."""
         self.store.update("myaddr", {"profile": "p1"})

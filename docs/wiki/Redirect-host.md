@@ -1,6 +1,6 @@
 # Redirect host
 
-> **Applies to:** portnook 0.34 (rc1) · [Versions](Versions)
+> **Applies to:** portnook 0.36 (rc1) · [Versions](Versions)
 
 The VPN port changes now and then, and a URL with a port is hard to remember. A **redirect host** is a fixed
 address, e.g. `https://start.example.com`, that answers with a **302** to the current
@@ -13,12 +13,47 @@ Page **Redirect**. Two providers:
 
 ## Cloudflare
 
-1. The entry domain is at Cloudflare. For `start.example.com` add a **proxied** DNS record (orange cloud), e.g.
-   `AAAA 100::`.
-2. API token: **My Profile → API Tokens → Create Token**, permission **Zone → Single Redirect → Edit**, only for
-   that zone (with a zone ID no other permission is needed; with a domain name also **Zone → Zone → Read**).
-3. In portnook: provider Cloudflare, entry host, target subname (e.g. `app`), zone and token, **Save and
-   run**. portnook creates one rule "portnook redirect start.example.com" and only updates that one.
+Cloudflare can redirect for a domain that is **fully** at Cloudflare (its name servers point to Cloudflare), or,
+without any domain, on the free **workers.dev** address of your account (see below). Pointing a record of a domain
+elsewhere to a Cloudflare IP does not work: Cloudflare does not know the host then (error 1000/1001).
+
+### 1. Domain at Cloudflare (skip for workers.dev)
+
+1. Dashboard → **Add a domain** (also "Connect a domain"), plan **Free**. Cloudflare shows two name servers,
+   e.g. `name.ns.cloudflare.com`; enter them **at the registrar of the domain** (not in portnook). Check the
+   imported records (e.g. MX for mail) first. After a while the domain is **Active**.
+2. **DNS → Records → Add record**: type `AAAA`, name `start`, IPv6 `100::`, **proxy on** (orange cloud). `100::`
+   is only a placeholder: Cloudflare answers with the redirect itself.
+
+### 2. API token
+
+Open **https://dash.cloudflare.com/profile/api-tokens** (in the new dashboard: profile menu → **Settings** →
+**API Tokens**) → **Create Token** → **Start from scratch** / **Create Custom Token** (not a template). Add:
+
+| Scope | Permission | Level | For |
+|---|---|---|---|
+| Zone | Single Redirect (also shown as "Dynamic Redirect") | Edit | own domain |
+| Zone | Zone | Read | round robin |
+| Zone | Workers Routes | Edit | round robin |
+| Account | Workers Scripts | Edit | round robin and workers.dev |
+
+Resources: **Zone** = only your domain, **Account** = your account. Expiration "1 year" is safer than none.
+Copy the token at once, it is shown only once.
+
+### 3. In portnook
+
+**Redirect** → section of the start URL (or **Add start URL**, entry host e.g. `start.example.com`) → provider
+**Cloudflare**, zone (domain or zone ID, from the domain's **Overview**, box "API") and token → **Save and run**.
+In failover portnook creates one rule "portnook redirect start.example.com" per entry and only updates those.
+
+### Without a domain: workers.dev (0.36)
+
+Every Cloudflare account has a free name below `workers.dev`. Set it once: **Workers & Pages** → your
+subdomain (e.g. `familie-muster` → `familie-muster.workers.dev`). Then enter the start URL
+`<worker>.<account>.workers.dev`, e.g. `tv.familie-muster.workers.dev`, with provider Cloudflare and an **empty
+zone**. portnook uploads a Worker named `tv` and switches it on at workers.dev; no route and no own domain are
+needed. The token needs only **Account → Workers Scripts → Edit**. Only that exact address works (no `app.` or
+`*.` in front). It works in failover and in round robin.
 
 ## Round robin (share clients between both tunnels)
 

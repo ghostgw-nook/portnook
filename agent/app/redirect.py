@@ -322,16 +322,7 @@ def cloudflare_worker_apply(token, zone, rules, status, device=None, request=htt
     account = (info.get("account") or {}).get("id")
     if not account:
         raise RedirectError("Cloudflare: Konto der Zone unbekannt.")
-    body, ctype = _multipart(worker_js(rules, status))
-    try:
-        resp = request("PUT", "%s/accounts/%s/workers/scripts/%s" % (base, account, name), body=body,
-                       device=device, timeout=30, headers={"Authorization": "Bearer " + token,
-                                                           "Accept": "application/json", "Content-Type": ctype})
-    except httpc.HttpError as err:
-        raise RedirectError("Cloudflare: %s" % err)
-    data = resp.json()
-    if resp.status >= 400 or not isinstance(data, dict) or data.get("success") is False:
-        raise RedirectError("Cloudflare Worker HTTP %d (Token braucht Workers Scripts: Edit)" % resp.status)
+    _put_worker(request, base, token, account, name, rules, status, device)
     wanted = [e + "/*" for e, _ in rules]
     routes = _cf(request, "GET", "%s/zones/%s/workers/routes" % (base, zone), token, device) or []
     have = {r.get("pattern"): r for r in routes}
@@ -349,6 +340,53 @@ def cloudflare_worker_apply(token, zone, rules, status, device=None, request=htt
     for r in own:
         _cf(request, "DELETE", "%s/zones/%s/rulesets/%s/rules/%s" % (base, zone, rid, r["id"]), token, device)
     return "Worker aktualisiert, %d Route(n)" % len(wanted)
+
+
+_WORKERS_DEV = re.compile(r"([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)\.([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)\.workers\.dev")
+
+
+def is_workers_dev(host):
+    return host.endswith(".workers.dev")
+
+
+def _put_worker(request, base, token, account, name, rules, status, device):
+    body, ctype = _multipart(worker_js(rules, status))
+    try:
+        resp = request("PUT", "%s/accounts/%s/workers/scripts/%s" % (base, account, name), body=body,
+                       device=device, timeout=30, headers={"Authorization": "Bearer " + token,
+                                                           "Accept": "application/json", "Content-Type": ctype})
+    except httpc.HttpError as err:
+        raise RedirectError("Cloudflare: %s" % err)
+    data = resp.json()
+    if resp.status >= 400 or not isinstance(data, dict) or data.get("success") is False:
+        raise RedirectError("Cloudflare Worker HTTP %d (Token braucht Workers Scripts: Edit)" % resp.status)
+
+
+def workers_dev_apply(token, zone, host, rules, status, device=None, request=httpc.request):
+    """0.36.0 (owner): an entry on Cloudflare's free ``<worker>.<account>.workers.dev`` address, no own domain and
+    no route needed. The Worker is named after the first label and switched on at workers.dev; the account's
+    workers.dev name must be the second label (set once in Cloudflare under Workers & Pages)."""
+    m = _WORKERS_DEV.fullmatch(host)
+    if not m:
+        raise RedirectError("workers.dev: Adresse in der Form <worker>.<konto>.workers.dev (%s)." % host)
+    name, sub, base = m.group(1), m.group(3), cf_base()
+    if zone:
+        info = _cf(request, "GET", "%s/zones/%s" % (base, _zone_id(request, base, token, zone, device)), token, device) or {}
+        account = (info.get("account") or {}).get("id")
+    else:
+        accounts = _cf(request, "GET", base + "/accounts", token, device) or []
+        account = accounts[0].get("id") if accounts and isinstance(accounts[0], dict) else None
+    if not account:
+        raise RedirectError("Cloudflare: Konto nicht gefunden (Token braucht Workers Scripts: Edit für das Konto).")
+    have = (_cf(request, "GET", "%s/accounts/%s/workers/subdomain" % (base, account), token, device, ok404=True)
+            or {}).get("subdomain")
+    if have != sub:
+        raise RedirectError("workers.dev: Die Konto-Subdomain ist %s, nicht %s (Cloudflare → Workers & Pages)."
+                            % (have or "noch nicht eingerichtet", sub))
+    _put_worker(request, base, token, account, name, rules, status, device)
+    _cf(request, "POST", "%s/accounts/%s/workers/scripts/%s/subdomain" % (base, account, name), token, device,
+        body={"enabled": True, "previews_enabled": False})
+    return "%s: Worker aktualisiert" % host
 
 
 def cloudflare_worker_remove(token, zone, device=None, request=httpc.request, name=WORKER_NAME):
@@ -462,13 +500,15 @@ class Redirect:
         fixed = body.get("fixed_port")
         new["fixed_port"] = validate.port(fixed, "Fester Port") if fixed not in (None, "", 0) else 0
         entry = str(body.get("entry_host") or "").strip().lower().rstrip(".")
+        if provider and is_workers_dev(entry) and (provider != "cloudflare" or not _WORKERS_DEV.fullmatch(entry)):
+            raise ValidationError("Eingang %s: workers.dev nur als <worker>.<konto>.workers.dev mit Cloudflare." % entry)
         if provider and not (validate.is_hostname(entry) and "." in entry):  # the main entry goes via the main provider
             raise ValidationError("Eingangs-Host (z. B. start.example.ch) fehlt oder ist ungültig.")
         new["entry_host"] = entry
         cf = dict(cur.get("cf") or {})
         if provider == "cloudflare":
             zone = str((body.get("cf") or {}).get("zone") or "").strip().lower()
-            if not (_ZONE_ID.fullmatch(zone) or validate.is_hostname(zone)):
+            if zone and not (_ZONE_ID.fullmatch(zone) or validate.is_hostname(zone)):  # 0.36.0: empty = workers.dev only
                 raise ValidationError("Cloudflare-Zone: Zone-ID oder Domain.")
             token = str((body.get("cf") or {}).get("token") or "").strip()
             if token:
@@ -537,7 +577,7 @@ class Redirect:
             if kind == "cloudflare":
                 cfb = row.get("cf") if isinstance(row.get("cf"), dict) else {}
                 zone = str(cfb.get("zone") or "").strip().lower()
-                if not (_ZONE_ID.fullmatch(zone) or validate.is_hostname(zone)):
+                if zone and not (_ZONE_ID.fullmatch(zone) or validate.is_hostname(zone)):
                     raise ValidationError("Anbieter %d: Cloudflare-Zone (Zone-ID oder Domain)." % (i + 2))
                 token = str(cfb.get("token") or "").strip()
                 if token and not re.fullmatch(r"[A-Za-z0-9_-]{20,200}", token):
@@ -599,6 +639,9 @@ class Redirect:
             via = str(row.get("via") or "")
             if via not in kinds:
                 raise ValidationError("Eingang %s: Anbieter unbekannt." % entry)
+            if is_workers_dev(base):  # 0.36.0: exactly <worker>.<account>.workers.dev, only with Cloudflare
+                if wild or not _WORKERS_DEV.fullmatch(entry) or kinds[via] != "cloudflare":
+                    raise ValidationError("Eingang %s: workers.dev nur als <worker>.<konto>.workers.dev mit Cloudflare." % entry)
             if wild and kinds[via] == "cloudflare" and mode != "roundrobin":
                 raise ValidationError("Cloudflare: *.host nur mit Skript oder im Modus Round Robin (Worker).")
             rule = {"entry": entry, "sub": sub, "to": row.get("to")}
@@ -792,6 +835,32 @@ class Redirect:
                     result.update({"ok": False, "error": "Anbieter %s: %s" % (bad[0]["id"], bad[0].get("error", ""))})
             return result
 
+    def _cloudflare(self, cf, cfg, tgt, via, was_worker, wname):
+        """Run one Cloudflare provider: its own-domain entries as redirect rules (failover) or the Worker with
+        routes (round robin); 0.36.0: its workers.dev entries each as a Worker of their own. Returns
+        ``(detail, worker on routes)``."""
+        kw = {"request": self.request} if self.request else {}
+        dev, status, rr = self.agent.egress_device(), cfg.get("status", 302), cfg.get("mode") == "roundrobin"
+        rules = self.mappings_multi(cfg, tgt, via=via) if rr else [(e, [u]) for e, u in self.mappings(cfg, tgt, via=via)]
+        dev_rules = [(e, u) for e, u in rules if is_workers_dev(e)]
+        zone_rules = [(e, u) for e, u in rules if not is_workers_dev(e)]
+        parts, worker = [], False
+        if zone_rules or (was_worker and cf.get("zone")):
+            if not cf.get("zone"):
+                raise RedirectError("Cloudflare: Zone fehlt (ohne Zone gehen nur workers.dev-Adressen).")
+            if rr:
+                parts.append(cloudflare_worker_apply(cf["token"], cf["zone"], zone_rules, status, device=dev,
+                                                     name=wname, **kw))
+                worker = True
+            else:
+                if was_worker:  # back from round robin: the Worker routes go, the rules come back
+                    cloudflare_worker_remove(cf["token"], cf["zone"], device=dev, name=wname, **kw)
+                parts += ["%s: %s" % (e, cloudflare_apply(cf["token"], cf["zone"], e, u[0], status, device=dev, **kw))
+                          for e, u in zone_rules]
+        for e, u in dev_rules:
+            parts.append(workers_dev_apply(cf["token"], cf.get("zone", ""), e, [(e, u)], status, device=dev, **kw))
+        return "; ".join(parts) or "keine Eingänge", worker
+
     def _apply_extra(self, x, cfg, tgt, force, now):
         """One further provider (0.32.0) with its own rules, state and retry."""
         pid, kind = x["id"], x["kind"]
@@ -812,18 +881,8 @@ class Redirect:
         kw = {"request": self.request} if self.request else {}
         dev = self.agent.egress_device()
         try:
-            if worker:
-                cf = x["cf"]
-                detail = cloudflare_worker_apply(cf["token"], cf["zone"], rules, cfg.get("status", 302), device=dev,
-                                                 name=worker_name(pid), **kw)
-                st.update({"last_rc": 0, "last_output": [], "cf_worker": True})
-            elif kind == "cloudflare":
-                cf = x["cf"]
-                if st.get("cf_worker"):
-                    cloudflare_worker_remove(cf["token"], cf["zone"], device=dev, name=worker_name(pid), **kw)
-                    st["cf_worker"] = False
-                detail = "; ".join("%s: %s" % (e, cloudflare_apply(cf["token"], cf["zone"], e, u, cfg.get("status", 302),
-                                                                    device=dev, **kw)) for e, u in rules) or "keine Eingänge"
+            if kind == "cloudflare":
+                detail, st["cf_worker"] = self._cloudflare(x["cf"], cfg, tgt, pid, st.get("cf_worker"), worker_name(pid))
                 st.update({"last_rc": 0, "last_output": []})
             else:
                 rc, lines = self.run_script(tgt, cfg, rules=rules, name="script-%s.sh" % pid)
@@ -873,21 +932,9 @@ class Redirect:
         self.rt["queued"] = ""
         upd = {"last_try": now}
         try:
-            if worker:
-                cf = cfg.get("cf") or {}
-                kw = {"request": self.request} if self.request else {}
-                detail = cloudflare_worker_apply(cf["token"], cf["zone"], self.mappings_multi(cfg, tgt, via=""),
-                                                 cfg.get("status", 302), device=self.agent.egress_device(), **kw)
-                upd.update({"last_rc": 0, "last_output": [], "cf_worker": True})
-            elif provider == "cloudflare":
-                cf = cfg.get("cf") or {}
-                kw = {"request": self.request} if self.request else {}
-                if cfg.get("cf_worker"):  # back from round robin: the Worker routes go, the rules come back
-                    cloudflare_worker_remove(cf["token"], cf["zone"], device=self.agent.egress_device(), **kw)
-                    upd["cf_worker"] = False
-                detail = "; ".join("%s: %s" % (e, cloudflare_apply(cf["token"], cf["zone"], e, u, cfg.get("status", 302),
-                                                                    device=self.agent.egress_device(), **kw))
-                                   for e, u in self.mappings(cfg, tgt, via=""))
+            if provider == "cloudflare":
+                detail, upd["cf_worker"] = self._cloudflare(cfg.get("cf") or {}, cfg, tgt, "", cfg.get("cf_worker"),
+                                                            WORKER_NAME)
                 upd.update({"last_rc": 0, "last_output": []})
             else:
                 rc, lines = self.run_script(tgt, cfg)

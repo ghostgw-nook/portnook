@@ -14,12 +14,15 @@ BASE = "https://cf.test/client/v4"
 class FakeCf:
     """Records the calls; keeps routes and the redirect ruleset of one zone."""
 
-    def __init__(self, routes=None, rules=None, script_status=200):
+    def __init__(self, routes=None, rules=None, script_status=200, subdomain="familie-muster"):
         self.routes = routes or []
         self.ruleset = {"id": "rs1", "rules": rules or []}
         self.script = None
         self.script_status = script_status
         self.calls = []
+        self.subdomain = subdomain
+        self.scripts = {}
+        self.dev_on = {}
 
     def __call__(self, method, url, body=None, headers=None, device=None, timeout=20, **kw):
         path = url[len(BASE):]
@@ -27,7 +30,17 @@ class FakeCf:
         ok = lambda result: httpc.Response(200, {}, json.dumps({"success": True, "result": result}).encode())
         if path == "/zones/%s" % ZONE:
             return ok({"id": ZONE, "account": {"id": ACCOUNT}})
-        if path == "/accounts/%s/workers/scripts/%s" % (ACCOUNT, redirect.WORKER_NAME) and method == "PUT":
+        if path == "/accounts":
+            return ok([{"id": ACCOUNT, "name": "Muster"}])
+        if path == "/accounts/%s/workers/subdomain" % ACCOUNT:
+            if not self.subdomain:
+                return httpc.Response(404, {}, b'{"success": false, "errors": [{"message": "no subdomain"}]}')
+            return ok({"subdomain": self.subdomain})
+        if path.startswith("/accounts/%s/workers/scripts/" % ACCOUNT) and path.endswith("/subdomain") and method == "POST":
+            self.dev_on[path.split("/")[-2]] = body
+            return ok({})
+        if path.startswith("/accounts/%s/workers/scripts/" % ACCOUNT) and method == "PUT":
+            self.scripts[path.rsplit("/", 1)[1]] = body
             self.script = (body, headers.get("Content-Type"))
             return httpc.Response(self.script_status, {}, json.dumps({"success": self.script_status < 400}).encode())
         if path == "/zones/%s/workers/routes" % ZONE:
@@ -108,6 +121,22 @@ class WorkerTest(unittest.TestCase):
                             {"id": "y", "pattern": "shop.example.ch/*", "script": "someone-else"}])
         redirect.cloudflare_worker_remove(TOKEN, ZONE, request=cf)
         self.assertEqual([r["id"] for r in cf.routes], ["y"])
+
+    def test_workers_dev_without_zone(self):
+        """0.36.0: <worker>.<account>.workers.dev: Worker named after the first label, switched on there."""
+        cf = FakeCf()
+        rules = [("tv.familie-muster.workers.dev", ["https://tv.a.example.ch:41000", "https://tv.b.example.ch:51000"])]
+        self.assertEqual(redirect.workers_dev_apply(TOKEN, "", rules[0][0], rules, 302, request=cf),
+                         "tv.familie-muster.workers.dev: Worker aktualisiert")
+        self.assertIn("tv", cf.scripts)
+        self.assertIn("tv.b.example.ch:51000", cf.scripts["tv"].decode())
+        self.assertEqual(cf.dev_on["tv"], {"enabled": True, "previews_enabled": False})
+        self.assertEqual(cf.routes, [])
+        for bad, sub in (("tv.anderer.workers.dev", "familie-muster"), ("tv.familie-muster.workers.dev", "")):
+            cf = FakeCf(subdomain=sub)
+            with self.assertRaises(redirect.RedirectError) as ctx:
+                redirect.workers_dev_apply(TOKEN, "", bad, rules, 302, request=cf)
+            self.assertIn("Konto-Subdomain", str(ctx.exception))
 
     def test_host_patterns(self):
         self.assertEqual(redirect._js_re("start.example.ch"), r"^start\.example\.ch$")
