@@ -1783,7 +1783,7 @@ function addName(n) {
     '<td><select class="mn-domain">' + DOMAINS.map((d) => "<option>" + d + "</option>").join("") + "</select></td>" +
     '<td><select class="mn-role"><option value="entry">' + esc(tx("js.rolle_eingang")) + '</option><option value="endpoint">' +
     esc(tx("js.rolle_endpunkt")) + "</option></select></td>" +
-    '<td><input type="text" class="mn-ip" spellcheck="false" autocomplete="off" placeholder="203.0.113.20"></td>' +
+    '<td><input type="text" class="mn-ip" spellcheck="false" autocomplete="off" placeholder="203.0.113.20 / web.example.ch"></td>' +
     // 0.25.0 (owner): several VPN profiles per name; the name follows the active one of them, else the standby
     '<td><details class="mn-profile"><summary></summary><div class="mn-prof-list">' +
     (S.profiles || []).map((x) => '<label><input type="checkbox" value="' + esc(x.id) + '"> ' + esc(x.name) + "</label>").join("") +

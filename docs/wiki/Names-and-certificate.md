@@ -1,6 +1,6 @@
 # Names and certificate
 
-> **Applies to:** portnook 0.27 (rc1) · [Versions](Versions)
+> **Applies to:** portnook 0.35 (rc1) · [Versions](Versions)
 
 ## myaddr.tools name
 
@@ -23,7 +23,7 @@ All names are in one list on the **Names** page, sorted: entry names first, then
 
 | Use | Points to |
 |---|---|
-| **Entry / rewrite** | A fixed IP, e.g. your web hosting that serves the [redirect](Redirect-host). |
+| **Entry / rewrite** | A fixed IP, e.g. your web hosting that serves the [redirect](Redirect-host), a LAN IP or `127.0.0.1` (keeps an unused name alive). Or a **host name** like a CNAME (e.g. `web.example.com`): myaddr.tools has no CNAME records, so portnook looks up its IPv4 every 5 minutes and updates the A record when it changes. |
 | **Connection / endpoint** | The VPN exit IP. With a **profile**, the exit IP of that VPN profile. |
 
 A name with **several profiles** points to the active one of them, else to the one ready as standby. This lets

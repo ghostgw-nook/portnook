@@ -20,6 +20,7 @@ sent, there is no opt-in. ``ip=self`` is never used (``update()`` refuses it). `
 
 import ipaddress
 import os
+import socket
 import re
 import threading
 import time
@@ -254,7 +255,9 @@ ROLES = ("entry", "endpoint")
 class Names:
     """More myaddr names besides the main one, each with a role (0.13.0):
 
-    * ``entry``: the stable entry (redirect/rewrite host), A record = fixed IP of that host (0.30.1: also a LAN IP);
+    * ``entry``: the stable entry (redirect/rewrite host), A record = fixed IP of that host (0.30.1: also a LAN IP).
+      0.35.0 (owner): instead of an IP a host name (``host``), like a CNAME: myaddr has no CNAME records, so the
+      name is looked up regularly and the A record follows its IPv4 address;
     * ``endpoint``: a further name of the connection, A record = the same address as the main name (VPN exit IP).
       0.19.0: an endpoint name may belong to a VPN profile (``profile``); its A record is then always the exit
       IP of that profile's tunnel (active or standby), and the redirect uses it while that profile is active.
@@ -273,6 +276,7 @@ class Names:
         self.send = send
         self.lock = threading.Lock()
         self.next_try = {}
+        self.resolved = {}  # host -> (time, [IPv4]) of the last lookup (0.35.0)
 
     def items(self):
         self.migrate()
@@ -312,8 +316,15 @@ class Names:
             if pid:  # 0.27.8 (owner): several names may share profiles; Agent.tunnel_names keeps them apart
                 n["profile"] = pid
             if role == "entry":
-                ip = validate.ipv4(row.get("ip"), "IP des Eingangs-Hosts")  # 0.30.1: any IPv4, LAN too (owner)
-                n["ip"] = str(ip)
+                value = str(row.get("ip") or "").strip().lower().rstrip(".")
+                try:
+                    n["ip"] = str(ipaddress.IPv4Address(value))  # 0.30.1: any IPv4, LAN too (owner)
+                except ValueError:
+                    # 0.35.0 (owner): a host name, like a CNAME; its IPv4 is looked up regularly
+                    if not (validate.is_hostname(value) and "." in value):
+                        raise ValidationError("Eingang %s.%s: IPv4-Adresse oder Hostname (z. B. 192.0.2.10 oder "
+                                              "web.example.ch)." % (name, domain))
+                    n["host"] = value
             if row.get("key"):
                 n["key"] = check_key(row["key"])
             elif old.get("key") and (old.get("name"), old.get("domain")) == (name, domain):
@@ -392,9 +403,34 @@ class Names:
         used = set(cur) | {n["id"] for n in out}
         return next("n%d" % i for i in range(1, 100) if "n%d" % i not in used)
 
+    RESOLVE_EVERY = 300  # seconds between lookups of an entry host name
+
+    def lookup(self, host):
+        """IPv4 addresses of ``host`` (system resolver), sorted; ``[]`` if it has none."""
+        try:
+            infos = socket.getaddrinfo(host, None, socket.AF_INET, socket.SOCK_STREAM)
+        except (OSError, UnicodeError):
+            return []
+        return sorted({i[4][0] for i in infos})
+
+    def host_ip(self, n):
+        """0.35.0: IPv4 of an entry's host name, looked up at most every ``RESOLVE_EVERY`` seconds. The address
+        sent last stays as long as the name still has it (no flapping between several A records); an empty
+        answer keeps the record (``""`` = nothing to send)."""
+        host, now = n["host"], self.clock()
+        at, ips = self.resolved.get(host, (None, []))
+        if at is None or now - at >= self.RESOLVE_EVERY:
+            had, ips = ips, self.lookup(host)
+            self.resolved[host] = (now, ips)
+            if not ips and (at is None or had):  # once, not every lookup
+                log("myaddr %s.%s: %s has no IPv4 address", n["name"], n["domain"], host)
+        if not ips:
+            return ""
+        return n.get("sent_ip") if n.get("sent_ip") in ips else ips[0]
+
     def ip_for(self, n):
         if n["role"] == "entry":
-            return n.get("ip", "")
+            return self.host_ip(n) if n.get("host") else n.get("ip", "")
         if n.get("profile"):
             # 0.19.0: the exit IP of that profile's tunnel; 0.27.8: of the tunnel this name serves (never both)
             return self.agent.name_exit_ip(n["id"])
@@ -454,7 +490,7 @@ class Names:
             out.append({"id": n["id"], "name": n["name"], "domain": n["domain"], "role": n["role"],
                         "cert": n.get("cert", True),
                         "profile": n.get("profile", ""),
-                        "ip": n.get("ip", ""), "key_set": bool(n.get("key")), "target": self.ip_for(n),
+                        "ip": n.get("host") or n.get("ip", ""), "host": n.get("host", ""), "key_set": bool(n.get("key")), "target": self.ip_for(n),
                         "sent_ip": n.get("sent_ip", ""), "last_ok": last, "error": n.get("error", ""),
                         "next_update": last + KEEPALIVE if last else 0})
         return out

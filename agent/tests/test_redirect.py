@@ -437,7 +437,34 @@ class RedirectAgentTest(unittest.TestCase):
             self.now[0] += myaddr.KEEPALIVE
             names.tick()
             self.assertEqual(sent[-1], ("B", ip))
+        # 0.35.0: a host name instead of an IP, like a CNAME: its IPv4 is looked up and follows changes
+        answers = {"web.example.ch": ["203.0.113.5", "203.0.113.9"]}
+        names.lookup = lambda host: answers.get(host, [])
+        names.save({"names": [{"id": "n1", "name": "familie-tv", "domain": "myaddr.io", "ip": "Web.Example.ch.",
+                               "role": "entry"}]})
+        self.assertEqual(names.status()[0]["ip"], "web.example.ch")
+        self.now[0] += myaddr.KEEPALIVE
+        names.tick()
+        self.assertEqual(sent[-1], ("B", "203.0.113.5"))
+        n = len(sent)
+        answers["web.example.ch"] = ["203.0.113.9", "203.0.113.5"]  # same set in another order: no update
+        self.now[0] += names.RESOLVE_EVERY
+        names.tick()
+        self.assertEqual(len(sent), n)
+        answers["web.example.ch"] = ["198.51.100.4"]  # moved: followed after the next lookup
+        names.tick()
+        self.assertEqual(len(sent), n)  # still cached
+        self.now[0] += names.RESOLVE_EVERY
+        names.tick()
+        self.assertEqual(sent[-1], ("B", "198.51.100.4"))
+        answers["web.example.ch"] = []  # no answer: the record stays as it is
+        self.now[0] += names.RESOLVE_EVERY
+        n = len(sent)
+        names.tick()
+        self.assertEqual(len(sent), n)
         for bad in ({"names": [{"name": "familie-3", "domain": "myaddr.io", "role": "endpoint"}]},
+                    {"names": [{"name": "familie-3", "domain": "myaddr.io", "role": "entry", "key": "D" * 43,
+                                "ip": "kein host"}]},
                     {"names": [{"name": "familie-3", "domain": "myaddr.io", "role": "x", "key": "D" * 43}]}):
             with self.assertRaises(ValidationError):
                 names.save(bad)
