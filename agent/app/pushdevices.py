@@ -195,9 +195,9 @@ class Devices:
 
     # -- device changes ----------------------------------------------------------------
     def _answer(self, device):
-        s = self.settings()
+        base = self.settings()["drop_base"] or self.store.section("pushping").get("upload_url") or ""  # empty = upload URL
         pub = self.sign_pub()
-        return {"device_id": device["id"], "drop_url": "%s/%s.bin" % (s["drop_base"], device["path"]) if s["drop_base"] else "",
+        return {"device_id": device["id"], "drop_url": "%s/%s.bin" % (base, device["path"]) if base else "",
                 "sign_pub": pub.hex() if pub else "", "seq": device["seq"]}
 
     def register(self, token, body):

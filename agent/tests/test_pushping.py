@@ -365,6 +365,10 @@ class PublisherTest(unittest.TestCase):
         self.assertEqual((self.opened()["url"], self.opened()["seq"]), ("https://jf.familie-muster.example.ch:40000", 2))
         self.assertEqual(len(self.pings), 2)
 
+    def test_drop_url_falls_back_to_upload_url(self):
+        self.assertEqual(self.dev["drop_url"], "https://dav.example.ch/pn/%s.bin"
+                         % self.devices.get(self.dev["device_id"])["path"])
+
     def test_no_refresh_by_default(self):
         self.pub.tick()
         self.now[0] += 30 * 24 * 3600
