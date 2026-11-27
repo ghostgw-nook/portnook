@@ -219,6 +219,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._send(200, self.agent.status())
         if method == "GET" and path == "/api/logs":
             return self._send(200, {"lines": logmod.lines()})
+        if method == "GET" and path == "/api/pushping":
+            return self._send(200, self.agent.pushping.overview())
         if method == "GET":
             m = _DOWNLOAD_RE.fullmatch(path)
             if m:
@@ -274,6 +276,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self._send(200, self.agent.redirect.set_config(body))
             if path == "/api/push":
                 return self._send(200, self.agent.notify.set_config(body))
+            if path == "/api/pushping":
+                result = self.agent.pushping.set_settings(body)
+                self.agent.pushapi.sync()
+                return self._send(200, result)
+            if path == "/api/pushping/remove":
+                self.agent.pushping.remove(body.get("id"))
+                return self._send(200, self.agent.pushping.overview())
             if path == "/api/redirect/ssh-key":
                 if body.get("generate"):
                     return self._send(200, self.agent.redirect.ssh_generate())

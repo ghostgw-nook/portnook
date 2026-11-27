@@ -103,6 +103,10 @@ class Agent:
         from .usage import Usage
         self.usage = Usage(self, clock=clock)  # 0.37.0: connections per tunnel, CPU
         self.notify = Notifier(self, clock=clock)
+        from .pushapi import PushApi
+        from .pushdevices import Devices
+        self.pushping = Devices(self.data_dir, store, route=self.egress.route("lan"), clock=clock)
+        self.pushapi = PushApi(self.pushping)
 
     # -- state helpers ----------------------------------------------
     def password_set(self):
@@ -664,6 +668,7 @@ class Agent:
 
     def startup(self):
         """Re-apply the stored network config and start the reporter (non-blocking)."""
+        self.pushapi.sync()
         def work():
             st = self.setup_state()
             if st["proton"] or st["backend"]:
