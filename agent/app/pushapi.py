@@ -1,6 +1,7 @@
 """Device API for push ping, on its own port so the proxy can expose ``/_pn/`` without the web UI.
 
-The proxy (NPM or Zoraxy) forwards ``https://<entry>/_pn/`` to ``http://<portnook>:<port>/_pn/``.
+The proxy (NPM or Zoraxy) forwards ``https://<entry>/_pn/`` to ``http://<portnook>:<port>/_pn/``. A proxy that
+strips the prefix works too: ``/hello`` is the same as ``/_pn/hello``.
 
 * ``GET  /_pn/hello``: ``{"ok": true}`` (lets the app tell portnook from the media server).
 * ``POST /_pn/register``: ``{token, device_pub, push_token?, platform?, name?}`` -> device id, drop URL,
@@ -23,6 +24,12 @@ from .pushdevices import AuthError
 from .validate import ValidationError
 
 MAX_BODY = 16 * 1024
+
+
+def _route(raw):
+    """Request path without query and without the ``/_pn`` prefix (a proxy may strip it or keep it)."""
+    path = raw.split("?", 1)[0]
+    return path[len("/_pn"):] if path.startswith("/_pn/") else path
 
 
 class _Server(socketserver.ThreadingMixIn, http.server.HTTPServer):
@@ -78,13 +85,13 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         return data
 
     def do_GET(self):
-        if self.path.split("?", 1)[0] == "/_pn/hello":
+        if _route(self.path) == "/hello":
             return self._send(200, {"ok": True, "service": "portnook push"})
         self._send(404, {"error": "not found"})
 
     def do_POST(self):
-        path = self.path.split("?", 1)[0]
-        if path not in ("/_pn/register", "/_pn/device"):
+        path = _route(self.path)
+        if path not in ("/register", "/device"):
             self.close_connection = True
             return self._send(404, {"error": "not found"})
         ip = self.client_ip
@@ -95,7 +102,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         try:
             body = self._body()
             token = body.pop("token", "")
-            if path == "/_pn/register":
+            if path == "/register":
                 answer = self.server.devices.register(token, body)
             else:
                 answer = self.server.devices.update(token, body)

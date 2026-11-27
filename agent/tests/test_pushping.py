@@ -156,6 +156,10 @@ class DeviceApiTest(unittest.TestCase):
         self.assertEqual(statuses[0], 401)
         self.assertEqual(statuses[-1], 429)
 
+    def test_proxy_may_strip_the_prefix(self):
+        status, data = self.post("/register", {"token": GOOD, "device_pub": PUB, "platform": "android"})
+        self.assertEqual((status, bool(data.get("device_id"))), (200, True))
+
     def test_other_paths_are_404(self):
         self.assertEqual(self.post("/api/login", {"password": "x"})[0], 404)
         self.assertEqual(self.post("/_pn/other", {})[0], 404)

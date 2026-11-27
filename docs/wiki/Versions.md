@@ -10,6 +10,7 @@ versions.
 | Edition | portnook | Notes |
 |---|---|---|
 | **rc1** | 0.27.x–0.39.x | First release candidate before going public. All pages written; 0.30 adds the PROXY protocol, 0.31 round robin with Cloudflare, 0.32 further redirect providers, 0.37 up to 4 tunnels at once. |
+| **push** | 0.40.0-push.N | Preview line on branch `push`, image tag `push`: [Push ping](Push-ping). Not in `latest`. |
 
 ## Older versions
 
@@ -38,4 +39,5 @@ Example: [v0.27.0](https://github.com/ghostgw-nook/portnook/tree/v0.27.0/docs/wi
 | [VPN profiles and failover](VPN-profiles-and-failover) | 0.37 | 0.27 (rc1), up to 4 tunnels and load per tunnel in 0.37 |
 | [Redirect host](Redirect-host) | 0.39 | 0.27 (rc1), round robin with a Cloudflare Worker in 0.31, further providers in 0.32, a section per entry name with its provider in 0.34, Cloudflare guide and workers.dev in 0.36, up to 4 tunnels in round robin and evening out by load in 0.39 |
 | [Home network and LAN entry](Home-network-and-LAN-entry) | 0.27 | 0.27 (rc1) |
+| [Push ping](Push-ping) | 0.40 | 0.40 (push preview) |
 | [Troubleshooting](Troubleshooting) | 0.27 | 0.27 (rc1) |

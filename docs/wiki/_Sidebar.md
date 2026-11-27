@@ -17,6 +17,7 @@
 - [VPN profiles and failover](VPN-profiles-and-failover)
 - [Redirect host](Redirect-host)
 - [Home network and LAN entry](Home-network-and-LAN-entry)
+- [Push ping (preview)](Push-ping)
 
 **Help**
 
