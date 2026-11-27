@@ -666,9 +666,17 @@ h3 { font-size: 14px; margin: 16px 0 4px; }
     <p class="hint">{{pp.erneuern_hint}}</p>
     <h3>{{pp.ablage}}</h3>
     <div class="cols">
+      <div><label for="pp-storage">{{pp.ablage_art}}</label><select id="pp-storage">
+        <option value="cloudflare">{{pp.ablage_cloudflare}}</option>
+        <option value="webdav">{{pp.ablage_webdav}}</option></select></div>
+    </div>
+    <p class="hint" id="pp-cf-hint">{{pp.ablage_cloudflare_hint}}</p>
+    <div class="cols" id="pp-dav">
       <div><label for="pp-up">{{pp.webdav}}</label><input type="text" id="pp-up" placeholder="https://dav.example.ch/pn" spellcheck="false" autocomplete="off"></div>
       <div><label for="pp-user">{{pp.benutzer}}</label><input type="text" id="pp-user" spellcheck="false" autocomplete="off"></div>
       <div><label for="pp-pass">{{pp.passwort}} <span class="muted small" id="pp-pass-state"></span></label><input type="password" id="pp-pass" placeholder="{{myaddr.leer_lassen_unverandert}}" autocomplete="off"></div>
+    </div>
+    <div class="cols">
       <div><label for="pp-base">{{pp.abruf}}</label><input type="text" id="pp-base" placeholder="https://dav.example.ch/pn" spellcheck="false" autocomplete="off"></div>
     </div>
     <p class="hint">{{pp.abruf_hint}}</p>
@@ -1627,17 +1635,20 @@ async function refreshPushPing() {
     S.ppFilled = true;
     $("pp-on").checked = s.enabled; $("pp-port").value = s.port || ""; $("pp-media").value = s.media_url || "";
     $("pp-refresh").value = s.refresh_hours || 0;
+    $("pp-storage").value = s.storage || "webdav"; ppStorage();
     $("pp-up").value = up.upload_url || ""; $("pp-user").value = up.upload_user || ""; $("pp-base").value = s.drop_base || "";
   }
   $("pp-pass-state").textContent = up.upload_pass_set ? tx("js.gespeichert") : "";
+  const where = s.storage === "cloudflare" ? (up.cf_base || (up.cf_ready ? tx("pp.noch_nichts") : tx("pp.kein_cf_token")))
+    : (up.upload_url || tx("js.kein_ziel_eingerichtet"));
   const rows = [[tx("pp.gerate_api"), !s.enabled ? tx("pp.aus") : p.api_port ? tx("pp.hort_auf") + p.api_port : tx("pp.nicht_bereit")],
-    [tx("pp.ablage"), !up.upload_url ? tx("js.kein_ziel_eingerichtet") : up.last_error ? tx("pp.fehler") + up.last_error :
-      up.last_ok ? tx("pp.ok") + age(up.last_ok) : tx("pp.noch_nichts")],
+    [tx("pp.ablage"), where + " - " + (up.last_error ? tx("pp.fehler") + up.last_error
+      : up.last_ok ? tx("pp.ok") + age(up.last_ok) : tx("pp.noch_nichts"))],
     [tx("pp.firebase"), !f.account_set ? tx("pp.kein_konto") : f.last_error ? tx("pp.fehler") + f.last_error :
       f.project_id + (f.last_ok ? tx("js.ok_3") + age(f.last_ok) + " (" + f.sent + ")" : "")],
     [tx("pp.gerate"), String(p.devices.length)]];
   if (p.sign_pub) rows.push([tx("pp.signatur"), p.sign_pub.slice(0, 16) + "…"]);
-  dot("pp-dot", !s.enabled ? "" : (!p.api_port || up.last_error || f.last_error) ? "err" : (up.upload_url && up.last_ok) ? "ok" : "warn");
+  dot("pp-dot", !s.enabled ? "" : (!p.api_port || up.last_error || f.last_error) ? "err" : up.last_ok ? "ok" : "warn");
   $("pp-state").innerHTML = dl(rows);
   $("pp-fcm-state").textContent = f.account_set ? tx("pp.projekt") + f.project_id : tx("pp.kein_konto");
   $("pp-list").innerHTML = p.devices.length ? p.devices.map((d) => "<tr><td>" + esc(d.name) + "</td><td>" + esc(d.user_name) +
@@ -1645,8 +1656,13 @@ async function refreshPushPing() {
     esc(d.published_at ? age(d.published_at) : tx("js.nie")) + '</td><td><button type="button" data-pp-del="' + esc(d.id) + '">' +
     esc(tx("js.loschen")) + "</button></td></tr>").join("") : '<tr><td colspan="6" class="muted">' + esc(tx("pp.keine_gerate")) + "</td></tr>";
 }
+function ppStorage() {
+  const cf = $("pp-storage").value === "cloudflare";
+  $("pp-dav").classList.toggle("hidden", cf); $("pp-cf-hint").classList.toggle("hidden", !cf);
+}
+$("pp-storage").addEventListener("change", ppStorage);
 $("pp-save").addEventListener("click", (ev) => busy(ev.target, async () => {
-  const b = { enabled: $("pp-on").checked, port: $("pp-port").value.trim() || 8099, media_url: $("pp-media").value.trim(),
+  const b = { enabled: $("pp-on").checked, storage: $("pp-storage").value, port: $("pp-port").value.trim() || 8099, media_url: $("pp-media").value.trim(),
               refresh_hours: $("pp-refresh").value.trim() || 0,
               drop_base: $("pp-base").value.trim(), upload_url: $("pp-up").value.trim(), upload_user: $("pp-user").value.trim() };
   if ($("pp-pass").value) b.upload_pass = $("pp-pass").value;

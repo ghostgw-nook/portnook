@@ -7,8 +7,8 @@ Runs in the monitor loop (``tick``). A device's drop is (re)published when
 * or, if the setting ``refresh_hours`` is above 0, the last upload is older than that, so a host that forgets
   files gets them back. Default 0: only on a change.
 
-Files of removed devices are deleted. Uploads go through the VPN tunnel only (``internet`` route), never
-through the home line. The ``after_publish`` hooks (FCM ping) run only when a device's content changed (new
+Files of removed devices are deleted. The storage is a backend of ``pushstore`` (WebDAV or a Cloudflare Worker).
+Uploads go through the VPN tunnel only (``internet`` route), never through the home line. The ``after_publish`` hooks (FCM ping) run only when a device's content changed (new
 target or new key), not for a plain refresh: the app has nothing new to fetch then.
 
 Settings (``pushping`` section): ``upload_url`` (WebDAV folder), ``upload_user``, ``upload_pass``
@@ -19,7 +19,7 @@ import base64
 import json
 import time
 
-from . import httpc, pushcrypto
+from . import httpc, pushcrypto, pushstore
 from .log import log
 
 RETRY = 300
@@ -51,60 +51,55 @@ class Publisher:
         """``sha256/<base64>`` of the self-signed certificate (step P9), ``""`` until there is one."""
         return ""
 
-    # -- upload ---------------------------------------------------------------------
-    def _config(self):
-        st = self.agent.store.section("pushping")
-        return st.get("upload_url") or "", st.get("upload_user") or "", st.get("upload_pass") or ""
-
-    def _headers(self, user, password):
-        headers = {"Content-Type": "application/octet-stream", "Cache-Control": "no-cache"}
-        if user or password:
-            raw = ("%s:%s" % (user, password)).encode("utf-8")
-            headers["Authorization"] = "Basic " + base64.b64encode(raw).decode("ascii")
-        return headers
-
-    def _send(self, method, name, body=None):
-        url, user, password = self._config()
-        res = self.request(method, "%s/%s.bin" % (url, name), body=body, headers=self._headers(user, password),
-                           device=self.agent.egress.route("internet"), timeout=20)
-        if method == "DELETE" and res.status == 404:
-            return
-        if res.status not in (200, 201, 204):
-            raise httpc.HttpError("Zero-Trust-Seite antwortete %d" % res.status)
+    # -- storage ------------------------------------------------------------------------
+    def backend(self):
+        kind = self.devices.settings()["storage"]
+        return pushstore.BACKENDS.get(kind, pushstore.WebDav)(self)
 
     # -- loop ---------------------------------------------------------------------------
     def tick(self):
         s = self.devices.settings()
-        url, _, _ = self._config()
-        if not s["enabled"] or not url or self.devices.sign_pub() is None:
+        store = self.backend()
+        if not s["enabled"] or not store.ready() or self.devices.sign_pub() is None:
             return
         now = self.clock()
         if now < self.rt["next_try"]:
             return
         target = self.target()
         refresh = s["refresh_hours"] * 3600
-        changed = news = 0
+        orphans = self.devices.orphans()
+        done, news = [], 0
         try:
-            for path in self.devices.orphans():
-                self._send("DELETE", path)
-                self.devices.forget_orphan(path)
+            for path in orphans:
+                store.delete(path)
             if target is not None:
                 key = json.dumps(target, sort_keys=True)
                 for device in self.devices.list():
                     same = device.get("published_key") == key and device.get("published_pub") == device["pub"]
                     if same and (not refresh or now - device.get("published_at", 0) < refresh):
                         continue
-                    self.publish(device, target, key, now)
-                    changed += 1
+                    drop = self.seal(device, target, now)
+                    store.put(device["path"], drop)
+                    done.append((device, key, drop))
                     news += 0 if same else 1
+            if store.whole and (done or orphans):
+                table = {d["path"]: base64.b64decode(d["published_drop"]) for d in self.devices.list()
+                         if d.get("published_drop")}
+                table.update({d["path"]: drop for d, _, drop in done})
+                store.finish(table)
         except (httpc.HttpError, pushcrypto.DropError, OSError) as err:
             self.rt.update({"last_error": str(err)[:200], "next_try": now + RETRY})
             log("push ping upload failed: %s", self.rt["last_error"])
             return
+        for path in orphans:
+            self.devices.forget_orphan(path)
+        for device, key, drop in done:
+            self.devices.mark_published(device["id"], key, device["pub"], int(now),
+                                        base64.b64encode(drop).decode())
         self.rt.update({"last_error": "", "next_try": 0})
-        if changed:
+        if done:
             self.rt["last_ok"] = now
-            log("push ping: %d drop(s) published", changed)
+            log("push ping: %d drop(s) published", len(done))
         if news:
             for hook in self.after_publish:
                 try:
@@ -112,15 +107,24 @@ class Publisher:
                 except Exception as err:  # a ping problem never stops the uploads
                     log("push ping hook failed: %s", err)
 
-    def publish(self, device, target, key, now):
+    def seal(self, device, target, now):
         seq = self.devices.next_seq(device["id"])
         plain = json.dumps({"v": 1, "seq": seq, "ts": int(now), "url": target["url"], "cert": target["cert"]},
                            sort_keys=True, separators=(",", ":")).encode()
-        drop = pushcrypto.seal(plain, bytes.fromhex(device["pub"]), self.devices.sign_key)
-        self._send("PUT", device["path"], drop)
-        self.devices.mark_published(device["id"], key, device["pub"], int(now))
+        return pushcrypto.seal(plain, bytes.fromhex(device["pub"]), self.devices.sign_key)
+
+    def resolve(self):
+        """After saving the settings: find the public address of a Cloudflare drop Worker (errors only noted)."""
+        store = self.backend()
+        if store.kind == "cloudflare" and store.ready():
+            try:
+                store.resolve()
+            except httpc.HttpError as err:
+                self.rt["last_error"] = str(err)[:200]
 
     def status(self):
-        url, user, password = self._config()
-        return {"upload_url": url, "upload_user": user, "upload_pass_set": bool(password),
+        st = self.agent.store.section("pushping")
+        return {"storage": self.devices.settings()["storage"], "upload_url": st.get("upload_url") or "",
+                "upload_user": st.get("upload_user") or "", "upload_pass_set": bool(st.get("upload_pass")),
+                "cf_base": st.get("cf_base") or "", "cf_ready": pushstore.CloudflareWorker(self).ready(),
                 "last_ok": self.rt["last_ok"], "last_error": self.rt["last_error"]}

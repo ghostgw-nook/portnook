@@ -28,6 +28,7 @@ PUSH_TOKEN_MAX = 4096
 PLATFORMS = ("android", "ios", "tvos", "other")
 DEFAULT_PORT = 8099
 REFRESH_MAX_HOURS = 168
+STORAGES = ("webdav", "cloudflare")
 _HEX64 = re.compile(r"[0-9a-f]{64}")
 _ID = re.compile(r"[0-9a-f]{16}")
 _TOKEN = re.compile(r"[A-Za-z0-9._~+/=-]{8,512}")
@@ -79,7 +80,8 @@ class Devices:
         st = self.store.section("pushping")
         return {"enabled": st.get("enabled") is True, "port": int(st.get("port") or DEFAULT_PORT),
                 "media_url": st.get("media_url") or "", "drop_base": st.get("drop_base") or "",
-                "refresh_hours": int(st.get("refresh_hours") or 0)}
+                "refresh_hours": int(st.get("refresh_hours") or 0),
+                "storage": st.get("storage") if st.get("storage") in STORAGES else "webdav"}
 
     def set_settings(self, body):
         values = {"enabled": body.get("enabled") is True}
@@ -94,6 +96,10 @@ class Devices:
         if not 0 <= hours <= REFRESH_MAX_HOURS:
             raise ValidationError("Erneuerung: 0 bis %d Stunden." % REFRESH_MAX_HOURS)
         values["refresh_hours"] = hours
+        storage = str(body.get("storage") or "webdav")
+        if storage not in STORAGES:
+            raise ValidationError("Ablage unbekannt.")
+        values["storage"] = storage
         for key in ("media_url", "drop_base"):
             url = str(body.get(key) or "").strip().rstrip("/")
             if url and not re.fullmatch(r"https?://[A-Za-z0-9.\-:\[\]]+(/[A-Za-z0-9._~/-]*)?", url):
@@ -163,7 +169,7 @@ class Devices:
         for d in devices:
             d["push"] = bool(self.get(d["id"]).get("push_token"))
         pub = self.sign_pub()
-        hidden = ("push_token", "published_key")
+        hidden = ("push_token", "published_key", "published_drop")
         devices = [{k: v for k, v in d.items() if k not in hidden} for d in devices]
         return {"settings": self.settings(), "devices": devices, "sign_pub": pub.hex() if pub else ""}
 
@@ -195,7 +201,9 @@ class Devices:
 
     # -- device changes ----------------------------------------------------------------
     def _answer(self, device):
-        base = self.settings()["drop_base"] or self.store.section("pushping").get("upload_url") or ""  # empty = upload URL
+        st = self.store.section("pushping")
+        own = st.get("cf_base") if self.settings()["storage"] == "cloudflare" else st.get("upload_url")
+        base = self.settings()["drop_base"] or own or ""  # empty = where the storage serves it
         pub = self.sign_pub()
         return {"device_id": device["id"], "drop_url": "%s/%s.bin" % (base, device["path"]) if base else "",
                 "sign_pub": pub.hex() if pub else "", "seq": device["seq"]}
@@ -255,11 +263,12 @@ class Devices:
             self._save()
             return device["seq"]
 
-    def mark_published(self, device_id, key, pub, when):
+    def mark_published(self, device_id, key, pub, when, drop=""):
         with self._lock:
             device = self._devices.get(device_id)
             if device is not None:
-                device.update({"published_key": key, "published_pub": pub, "published_at": when})
+                device.update({"published_key": key, "published_pub": pub, "published_at": when,
+                               "published_drop": drop})
                 self._save()
 
     def orphans(self):

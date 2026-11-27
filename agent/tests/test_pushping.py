@@ -422,6 +422,84 @@ class PublisherTest(unittest.TestCase):
         self.assertTrue(self.pub.status()["upload_pass_set"])
 
 
+class FakeCloudflare:
+    """Cloudflare API for the drop Worker: zone, workers.dev subdomain, script upload."""
+
+    ZONE = "0123456789abcdef0123456789abcdef"
+
+    def __init__(self):
+        self.calls, self.table, self.enabled, self.status = [], None, False, 200
+
+    def __call__(self, method, url, body=None, headers=None, device=None, timeout=20, **kw):
+        path = url.split("/client/v4", 1)[1]
+        self.calls.append((method, path, device))
+        ok = lambda res: httpc.Response(200, {}, json.dumps({"success": True, "result": res}).encode())
+        if method == "GET" and path == "/zones/" + self.ZONE:
+            return ok({"account": {"id": "acc1"}})
+        if method == "GET" and path == "/accounts/acc1/workers/subdomain":
+            return ok({"subdomain": "familie-muster"})
+        if method == "PUT" and path == "/accounts/acc1/workers/scripts/portnook-drops":
+            if self.status != 200:
+                return httpc.Response(self.status, {}, b"{}")
+            js = body.decode()
+            self.table = json.loads(js.split("const D = ", 1)[1].split(";\n", 1)[0])
+            return ok({})
+        if method == "POST" and path == "/accounts/acc1/workers/scripts/portnook-drops/subdomain":
+            self.enabled = body == {"enabled": True, "previews_enabled": False}
+            return ok({})
+        return httpc.Response(404, {}, b"{}")
+
+
+@unittest.skipUnless(shutil.which("openssl"), "openssl CLI missing")
+class CloudflareStorageTest(unittest.TestCase):
+    def setUp(self):
+        from app import pushcrypto
+        from app.pushdrop import Publisher
+        self.pc = pushcrypto
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.store = Store(os.path.join(self.tmp, "agent.json"))
+        self.store.update("redirect", {"provider": "cloudflare", "cf": {"token": "cf-token-1", "zone": FakeCloudflare.ZONE}})
+        self.devices = Devices(self.tmp, self.store, request=FakeMedia())
+        self.devices.set_settings({"enabled": True, "media_url": "http://192.168.1.10:8096", "storage": "cloudflare"})
+        self.cf = FakeCloudflare()
+        self.agent = FakeAgent(self.store)
+        self.pub = Publisher(self.agent, self.devices, request=self.cf, clock=lambda: 1000.0)
+        self.pub.resolve()
+        self.devkey = os.path.join(self.tmp, "dev.pem")
+        pushcrypto.generate_x25519_key(self.devkey)
+        self.dev = self.devices.register(GOOD, {"device_pub": pushcrypto.public_raw(self.devkey).hex()})
+
+    def test_worker_serves_the_drop(self):
+        path = self.devices.get(self.dev["device_id"])["path"]
+        self.assertEqual(self.dev["drop_url"], "https://portnook-drops.familie-muster.workers.dev/%s.bin" % path)
+        self.pub.tick()
+        import base64
+        plain = json.loads(self.pc.open_drop(base64.b64decode(self.cf.table[path]), self.devkey, self.devices.sign_pub()))
+        self.assertEqual(plain["url"], "https://jf.familie-muster.example.ch:51234")
+        self.assertTrue(self.cf.enabled)
+        self.assertTrue(all(c[2] == "internet" for c in self.cf.calls))
+        self.assertNotIn("published_drop", json.dumps(self.devices.overview()))
+
+    def test_removed_device_leaves_the_worker(self):
+        self.pub.tick()
+        self.devices.remove(self.dev["device_id"])
+        self.pub.tick()
+        self.assertEqual((self.cf.table, self.devices.orphans()), ({}, []))
+
+    def test_upload_error_is_retried(self):
+        self.cf.status = 403
+        self.pub.tick()
+        self.assertIn("403", self.pub.status()["last_error"])
+        self.assertFalse(self.devices.get(self.dev["device_id"]).get("published_at"))
+
+    def test_without_cloudflare_token_nothing_happens(self):
+        self.store.update("redirect", {"provider": "script", "cf": {}})
+        self.cf.calls = []
+        self.pub.tick()
+        self.assertEqual(self.cf.calls, [])
+
+
 class FakeGoogle:
     def __init__(self):
         self.calls = []

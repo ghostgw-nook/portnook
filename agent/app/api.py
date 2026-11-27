@@ -279,6 +279,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self._send(200, self.agent.notify.set_config(body))
             if path == "/api/pushping":
                 result = self.agent.pushping.set_settings(body)
+                self.agent.pushdrop.resolve()
                 self.agent.pushapi.sync()
                 return self._send(200, result)
             if path == "/api/pushping/fcm":
