@@ -220,7 +220,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if method == "GET" and path == "/api/logs":
             return self._send(200, {"lines": logmod.lines()})
         if method == "GET" and path == "/api/pushping":
-            return self._send(200, self.agent.pushping.overview())
+            return self._send(200, dict(self.agent.pushping.overview(), upload=self.agent.pushdrop.status()))
         if method == "GET":
             m = _DOWNLOAD_RE.fullmatch(path)
             if m:

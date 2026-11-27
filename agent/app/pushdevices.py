@@ -69,6 +69,7 @@ class Devices:
         self.request = request
         self.clock = clock
         self._lock = threading.Lock()
+        self._orphans = []
         self._devices = self._load()
 
     # -- settings ----------------------------------------------------------------
@@ -88,6 +89,16 @@ class Devices:
             if url and not re.fullmatch(r"https?://[A-Za-z0-9.\-:\[\]]+(/[A-Za-z0-9._~/-]*)?", url):
                 raise ValidationError("Adresse ungültig: %s" % key)
             values[key] = url
+        upload = str(body.get("upload_url") or "").strip().rstrip("/")
+        if upload and not re.fullmatch(r"https://[A-Za-z0-9.\-:\[\]]+(/[A-Za-z0-9._~/%-]*)?", upload):
+            raise ValidationError("WebDAV-Adresse ungültig (nur https).")
+        values["upload_url"] = upload
+        values["upload_user"] = str(body.get("upload_user") or "").strip()[:200]
+        password = str(body.get("upload_pass") or "")
+        if password:  # write-only: empty keeps the stored one
+            values["upload_pass"] = password[:500]
+        elif not upload:
+            values["upload_pass"] = ""
         if values["enabled"] and not values["media_url"]:
             raise ValidationError("Adresse des Mediaservers fehlt.")
         self.store.update("pushping", values)
@@ -111,6 +122,7 @@ class Devices:
         try:
             with open(self.path, "r", encoding="utf-8") as fh:
                 data = json.load(fh)
+            self._orphans = [p for p in data.get("orphans", []) if re.fullmatch(r"[0-9a-f]{32}", str(p))]
             return {d["id"]: d for d in data.get("devices", []) if _ID.fullmatch(str(d.get("id", "")))}
         except (OSError, ValueError, KeyError, TypeError):
             return {}
@@ -120,8 +132,8 @@ class Devices:
         tmp = self.path + ".tmp"
         fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            json.dump({"devices": sorted(self._devices.values(), key=lambda d: d["created"])}, fh, indent=2,
-                      sort_keys=True)
+            json.dump({"devices": sorted(self._devices.values(), key=lambda d: d["created"]),
+                       "orphans": self._orphans}, fh, indent=2, sort_keys=True)
             fh.flush()
             os.fsync(fh.fileno())
         os.replace(tmp, self.path)
@@ -141,6 +153,8 @@ class Devices:
         for d in devices:
             d["push"] = bool(self.get(d["id"]).get("push_token"))
         pub = self.sign_pub()
+        hidden = ("push_token", "published_key")
+        devices = [{k: v for k, v in d.items() if k not in hidden} for d in devices]
         return {"settings": self.settings(), "devices": devices, "sign_pub": pub.hex() if pub else ""}
 
     # -- media server check --------------------------------------------------------
@@ -218,6 +232,32 @@ class Devices:
             device = self._devices.pop(str(device_id or ""), None)
             if device is None:
                 raise ValidationError("Gerät nicht gefunden.")
+            self._orphans.append(device["path"])
             self._save()
         log("push ping device %s removed", device_id)
         return device
+
+    # -- publishing (app/pushdrop.py) ------------------------------------------------------
+    def next_seq(self, device_id):
+        with self._lock:
+            device = self._devices[device_id]
+            device["seq"] = int(device.get("seq", 0)) + 1
+            self._save()
+            return device["seq"]
+
+    def mark_published(self, device_id, key, pub, when):
+        with self._lock:
+            device = self._devices.get(device_id)
+            if device is not None:
+                device.update({"published_key": key, "published_pub": pub, "published_at": when})
+                self._save()
+
+    def orphans(self):
+        with self._lock:
+            return list(self._orphans)
+
+    def forget_orphan(self, path):
+        with self._lock:
+            if path in self._orphans:
+                self._orphans.remove(path)
+                self._save()

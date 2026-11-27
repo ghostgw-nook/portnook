@@ -164,5 +164,121 @@ class DeviceApiTest(unittest.TestCase):
         self.assertEqual(self.post("/_pn/register", {"token": GOOD, "device_pub": "nope"})[0], 400)
 
 
+class FakeEgress:
+    def route(self, kind):
+        return kind
+
+
+class FakeAgent:
+    def __init__(self, store):
+        self.store = store
+        self.egress = FakeEgress()
+        self.ip, self.port = "203.0.113.7", 51234
+
+    def vpn_exit_ip(self):
+        return self.ip
+
+    def public_port(self):
+        return self.port
+
+
+class FakeHost:
+    """Stands in for the WebDAV host."""
+
+    def __init__(self):
+        self.files, self.calls, self.status = {}, [], None
+
+    def __call__(self, method, url, body=None, headers=None, device=None, timeout=20, **kw):
+        self.calls.append((method, url, headers, device))
+        if self.status:
+            return httpc.Response(self.status, {}, b"")
+        name = url.rsplit("/", 1)[1]
+        if method == "PUT":
+            self.files[name] = body
+            return httpc.Response(201, {}, b"")
+        if method == "DELETE":
+            return httpc.Response(204 if self.files.pop(name, None) is not None else 404, {}, b"")
+        return httpc.Response(405, {}, b"")
+
+
+@unittest.skipUnless(shutil.which("openssl"), "openssl CLI missing")
+class PublisherTest(unittest.TestCase):
+    def setUp(self):
+        from app import pushcrypto
+        from app.pushdrop import Publisher
+        self.pc = pushcrypto
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.store = Store(os.path.join(self.tmp, "agent.json"))
+        self.now = [1000.0]
+        self.devices = Devices(self.tmp, self.store, request=FakeMedia())
+        self.devices.set_settings({"enabled": True, "media_url": "http://192.168.1.10:8096",
+                                   "upload_url": "https://dav.example.ch/pn", "upload_user": "u",
+                                   "upload_pass": "secret-pass"})
+        self.host = FakeHost()
+        self.agent = FakeAgent(self.store)
+        self.pub = Publisher(self.agent, self.devices, request=self.host, clock=lambda: self.now[0])
+        self.pings = []
+        self.pub.after_publish.append(lambda: self.pings.append(self.now[0]))
+        self.devkey = os.path.join(self.tmp, "dev.pem")
+        pushcrypto.generate_x25519_key(self.devkey)
+        self.dev = self.devices.register(GOOD, {"device_pub": pushcrypto.public_raw(self.devkey).hex()})
+
+    def opened(self):
+        name = self.devices.get(self.dev["device_id"])["path"] + ".bin"
+        plain = self.pc.open_drop(self.host.files[name], self.devkey, self.devices.sign_pub())
+        return json.loads(plain)
+
+    def test_publishes_target_once_and_pings(self):
+        self.pub.tick()
+        data = self.opened()
+        self.assertEqual((data["url"], data["seq"]), ("https://203.0.113.7:51234", 1))
+        self.assertEqual(self.host.calls[0][3], "internet")
+        self.assertTrue(self.host.calls[0][2]["Authorization"].startswith("Basic "))
+        self.pub.tick()
+        self.assertEqual(len(self.host.calls), 1)
+        self.assertEqual(len(self.pings), 1)
+
+    def test_port_change_and_refresh_republish(self):
+        self.pub.tick()
+        self.agent.port = 40000
+        self.pub.tick()
+        self.assertEqual((self.opened()["url"], self.opened()["seq"]), ("https://203.0.113.7:40000", 2))
+        self.now[0] += 6 * 3600 + 1
+        self.pub.tick()
+        self.assertEqual(self.opened()["seq"], 3)
+
+    def test_no_target_no_upload(self):
+        self.agent.ip = ""
+        self.pub.tick()
+        self.assertEqual(self.host.calls, [])
+
+    def test_failure_waits_and_retries(self):
+        self.host.status = 500
+        self.pub.tick()
+        self.assertIn("500", self.pub.status()["last_error"])
+        self.host.status = None
+        self.pub.tick()
+        self.assertEqual(len(self.host.calls), 1)
+        self.now[0] += 301
+        self.pub.tick()
+        self.assertEqual(self.opened()["url"], "https://203.0.113.7:51234")
+
+    def test_removed_device_file_is_deleted(self):
+        self.pub.tick()
+        self.devices.remove(self.dev["device_id"])
+        self.pub.tick()
+        self.assertEqual(self.host.files, {})
+        self.assertEqual(self.devices.orphans(), [])
+
+    def test_password_is_write_only(self):
+        self.devices.set_settings({"enabled": True, "media_url": "http://192.168.1.10:8096",
+                                   "upload_url": "https://dav.example.ch/pn", "upload_user": "u"})
+        self.assertEqual(self.store.section("pushping")["upload_pass"], "secret-pass")
+        status = json.dumps(self.pub.status()) + json.dumps(self.devices.overview())
+        self.assertNotIn("secret-pass", status)
+        self.assertTrue(self.pub.status()["upload_pass_set"])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -107,6 +107,8 @@ class Agent:
         from .pushdevices import Devices
         self.pushping = Devices(self.data_dir, store, route=self.egress.route("lan"), clock=clock)
         self.pushapi = PushApi(self.pushping)
+        from .pushdrop import Publisher
+        self.pushdrop = Publisher(self, self.pushping, clock=clock)
 
     # -- state helpers ----------------------------------------------
     def password_set(self):

@@ -45,7 +45,8 @@ class Monitor(threading.Thread):
         for name, fn in (("vpn exit ip", agent.refresh_exit_ip), ("vpn failover", agent.failover.tick),
                          ("tunnel state", self._tunnel), ("backend check", self._backend),
                          ("ddns", agent.ddns.tick), ("myaddr names", agent.names.tick), ("certificate", agent.certs.tick),
-                         ("redirect", agent.redirect.tick), ("push", agent.notify.tick)):
+                         ("redirect", agent.redirect.tick), ("push", agent.notify.tick),
+                         ("push ping", agent.pushdrop.tick)):
             try:
                 fn()
             except Exception as err:  # keep the loop alive
