@@ -1,0 +1,55 @@
+# Preview line for push ping (owner, 2026-11-27): the branch "push" is not merged into main.
+# Push to "push" -> tests -> pre-release tag v<VERSION>-push.<run> with the release note of VERSION
+# -> image ghcr.io/ghostgw-nook/portnook:push (build.yml with ref push). latest and main stay untouched.
+name: Push preview
+
+on:
+  push:
+    branches: [push]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: push-preview
+  cancel-in-progress: false
+
+jobs:
+  tests:
+    uses: ./.github/workflows/tests.yml
+
+  release:
+    needs: tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Tag and pre-release
+        id: tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN: ${{ github.run_number }}
+        run: |
+          set -euo pipefail
+          version=$(tr -d '[:space:]' < VERSION)
+          tag="v${version}-push.${RUN}"
+          git tag "$tag"
+          git push origin "refs/tags/$tag"
+          notes=".github/release-notes/${version}.md"
+          [ -f "$notes" ] || notes=/dev/null
+          gh release create "$tag" --prerelease --title "portnook $tag" --notes-file "$notes" --target "$GITHUB_SHA"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+  image:
+    needs: release
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/build.yml
+    with:
+      ref: push
+    secrets: inherit
