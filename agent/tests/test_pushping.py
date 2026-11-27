@@ -169,17 +169,23 @@ class FakeEgress:
         return kind
 
 
+class FakeRedirect:
+    def __init__(self, agent):
+        self.agent = agent
+
+    def target(self):
+        if not self.agent.ip or not self.agent.port:
+            return None
+        return {"url": "https://jf.familie-muster.example.ch:%d" % self.agent.port, "port": self.agent.port,
+                "ip": self.agent.ip}
+
+
 class FakeAgent:
     def __init__(self, store):
         self.store = store
         self.egress = FakeEgress()
+        self.redirect = FakeRedirect(self)
         self.ip, self.port = "203.0.113.7", 51234
-
-    def vpn_exit_ip(self):
-        return self.ip
-
-    def public_port(self):
-        return self.port
 
 
 class FakeHost:
@@ -232,7 +238,7 @@ class PublisherTest(unittest.TestCase):
     def test_publishes_target_once_and_pings(self):
         self.pub.tick()
         data = self.opened()
-        self.assertEqual((data["url"], data["seq"]), ("https://203.0.113.7:51234", 1))
+        self.assertEqual((data["url"], data["seq"]), ("https://jf.familie-muster.example.ch:51234", 1))
         self.assertEqual(self.host.calls[0][3], "internet")
         self.assertTrue(self.host.calls[0][2]["Authorization"].startswith("Basic "))
         self.pub.tick()
@@ -243,7 +249,7 @@ class PublisherTest(unittest.TestCase):
         self.pub.tick()
         self.agent.port = 40000
         self.pub.tick()
-        self.assertEqual((self.opened()["url"], self.opened()["seq"]), ("https://203.0.113.7:40000", 2))
+        self.assertEqual((self.opened()["url"], self.opened()["seq"]), ("https://jf.familie-muster.example.ch:40000", 2))
         self.now[0] += 6 * 3600 + 1
         self.pub.tick()
         self.assertEqual(self.opened()["seq"], 3)
@@ -262,7 +268,7 @@ class PublisherTest(unittest.TestCase):
         self.assertEqual(len(self.host.calls), 1)
         self.now[0] += 301
         self.pub.tick()
-        self.assertEqual(self.opened()["url"], "https://203.0.113.7:51234")
+        self.assertEqual(self.opened()["url"], "https://jf.familie-muster.example.ch:51234")
 
     def test_removed_device_file_is_deleted(self):
         self.pub.tick()

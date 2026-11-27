@@ -35,12 +35,16 @@ class Publisher:
 
     # -- target ---------------------------------------------------------------------
     def target(self):
-        """``{"url", "cert"}`` the devices should use now, or ``None`` while IP/port are unknown."""
-        ip = self.agent.vpn_exit_ip()
-        port = self.agent.public_port() if ip else 0
-        if not ip or not port:
+        """``{"url", "cert"}`` the devices should use now, or ``None`` while it is unknown.
+
+        The URL is the redirect target (``https://<name below the myaddr name>:<port>``): the proxy picks the
+        media server by that name (SNI/Host) and serves its certificate. A bare ``https://IP:port`` would land
+        on the proxy's default host. ``cert`` stays empty (system trust) until the pinned certificate (P9).
+        """
+        tgt = self.agent.redirect.target()
+        if not tgt or not tgt.get("url"):
             return None
-        return {"url": "https://%s:%d" % (ip, port), "cert": self.cert_fingerprint()}
+        return {"url": tgt["url"], "cert": self.cert_fingerprint()}
 
     def cert_fingerprint(self):
         """``sha256/<base64>`` of the self-signed certificate (step P9), ``""`` until there is one."""
