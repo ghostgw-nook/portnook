@@ -10,7 +10,7 @@ import unittest
 
 from app import pushcrypto as pc
 
-VECTORS = os.path.join(os.path.dirname(__file__), "data", "push_drop_vectors.json")
+VECTORS = os.path.join(os.path.dirname(__file__), "vectors", "push_drop.json")
 
 
 def _openssl_has_ed25519():
