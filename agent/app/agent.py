@@ -109,6 +109,9 @@ class Agent:
         self.pushapi = PushApi(self.pushping)
         from .pushdrop import Publisher
         self.pushdrop = Publisher(self, self.pushping, clock=clock)
+        from .pushfcm import Fcm
+        self.pushfcm = Fcm(self, self.pushping, clock=clock)
+        self.pushdrop.after_publish.append(self.pushfcm.ping_all)
 
     # -- state helpers ----------------------------------------------
     def password_set(self):

@@ -280,5 +280,75 @@ class PublisherTest(unittest.TestCase):
         self.assertTrue(self.pub.status()["upload_pass_set"])
 
 
+class FakeGoogle:
+    def __init__(self):
+        self.calls = []
+        self.send_status, self.send_body = 200, b"{}"
+
+    def __call__(self, method, url, body=None, headers=None, device=None, timeout=20, **kw):
+        self.calls.append((url, body, headers, device))
+        if "oauth2" in url:
+            return httpc.Response(200, {}, json.dumps({"access_token": "ya29.test", "expires_in": 3600}).encode())
+        return httpc.Response(self.send_status, {}, self.send_body)
+
+
+@unittest.skipUnless(shutil.which("openssl"), "openssl CLI missing")
+class FcmTest(unittest.TestCase):
+    def setUp(self):
+        import subprocess
+        from app.pushfcm import Fcm
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        store = Store(os.path.join(self.tmp, "agent.json"))
+        store.update("pushping", {"enabled": True, "media_url": "http://192.168.1.10:8096"})
+        self.devices = Devices(self.tmp, store, request=FakeMedia())
+        self.google = FakeGoogle()
+        self.fcm = Fcm(FakeAgent(store), self.devices, request=self.google, clock=lambda: 1000)
+        key = subprocess.run(["openssl", "genpkey", "-algorithm", "RSA", "-pkeyopt", "rsa_keygen_bits:2048"],
+                             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=True,
+                             universal_newlines=True).stdout
+        self.account = json.dumps({"type": "service_account", "project_id": "demo-project",
+                                   "client_email": "pn@demo-project.iam.gserviceaccount.com", "private_key": key})
+        self.android = self.devices.register(GOOD, {"device_pub": PUB, "push_token": "tok-a", "platform": "android"})
+        self.devices.register(GOOD, {"device_pub": "cd" * 32, "push_token": "tok-i", "platform": "ios"})
+
+    def test_account_is_write_only(self):
+        status = self.fcm.set_account({"service_account": self.account})
+        self.assertEqual((status["project_id"], status["account_set"]), ("demo-project", True))
+        self.assertNotIn("PRIVATE KEY", json.dumps(status))
+        with open(self.fcm.meta_path) as fh:
+            self.assertNotIn("PRIVATE KEY", fh.read())
+        self.assertEqual(stat.S_IMODE(os.stat(self.fcm.key_path).st_mode), 0o600)
+
+    def test_bad_account_is_refused(self):
+        for value in ("nope", json.dumps({"type": "user"}), json.dumps({"type": "service_account"})):
+            with self.assertRaises(ValidationError):
+                self.fcm.set_account({"service_account": value})
+
+    def test_ping_only_android_with_empty_data(self):
+        self.fcm.set_account({"service_account": self.account})
+        self.assertEqual(self.fcm.ping_all(), 1)
+        token_call, send_call = self.google.calls
+        assertion = dict(x.split("=", 1) for x in token_call[1].split("&"))["assertion"]
+        self.assertEqual(len(assertion.split(".")), 3)
+        self.assertEqual(send_call[0], "https://fcm.googleapis.com/v1/projects/demo-project/messages:send")
+        msg = send_call[1]["message"]
+        self.assertEqual((msg["token"], msg["data"]), ("tok-a", {"t": "refresh"}))
+        self.assertEqual(send_call[2]["Authorization"], "Bearer ya29.test")
+        self.assertEqual(send_call[3], "internet")
+        self.fcm.ping_all()
+        self.assertEqual(sum("oauth2" in c[0] for c in self.google.calls), 1)  # token cached
+
+    def test_unregistered_token_is_dropped(self):
+        self.fcm.set_account({"service_account": self.account})
+        self.google.send_status, self.google.send_body = 404, b'{"error":{"status":"NOT_FOUND","details":[{"errorCode":"UNREGISTERED"}]}}'
+        self.assertEqual(self.fcm.ping_all(), 0)
+        self.assertEqual(self.devices.get(self.android["device_id"])["push_token"], "")
+
+    def test_without_account_nothing_is_sent(self):
+        self.assertEqual(self.fcm.ping_all(), 0)
+        self.assertEqual(self.google.calls, [])
+
+
 if __name__ == "__main__":
     unittest.main()

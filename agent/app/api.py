@@ -220,7 +220,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if method == "GET" and path == "/api/logs":
             return self._send(200, {"lines": logmod.lines()})
         if method == "GET" and path == "/api/pushping":
-            return self._send(200, dict(self.agent.pushping.overview(), upload=self.agent.pushdrop.status()))
+            return self._send(200, dict(self.agent.pushping.overview(), upload=self.agent.pushdrop.status(),
+                                         fcm=self.agent.pushfcm.status()))
         if method == "GET":
             m = _DOWNLOAD_RE.fullmatch(path)
             if m:
@@ -280,6 +281,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 result = self.agent.pushping.set_settings(body)
                 self.agent.pushapi.sync()
                 return self._send(200, result)
+            if path == "/api/pushping/fcm":
+                return self._send(200, self.agent.pushfcm.set_account(body))
             if path == "/api/pushping/remove":
                 self.agent.pushping.remove(body.get("id"))
                 return self._send(200, self.agent.pushping.overview())

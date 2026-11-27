@@ -261,3 +261,10 @@ class Devices:
             if path in self._orphans:
                 self._orphans.remove(path)
                 self._save()
+
+    def clear_push_token(self, device_id):
+        with self._lock:
+            device = self._devices.get(device_id)
+            if device is not None and device.get("push_token"):
+                device["push_token"] = ""
+                self._save()
