@@ -141,7 +141,9 @@ class DeviceApiTest(unittest.TestCase):
         conn = http.client.HTTPConnection("127.0.0.1", self.server.server_address[1], timeout=5)
         conn.request("GET", "/_pn/hello")
         res = conn.getresponse()
-        self.assertEqual((res.status, json.loads(res.read())["ok"]), (200, True))
+        data = res.read()
+        self.assertEqual((res.status, json.loads(data)["ok"]), (200, True))
+        self.assertNotIn(b"portnook", data)
         conn.close()
 
     def test_register_and_update(self):
@@ -166,6 +168,113 @@ class DeviceApiTest(unittest.TestCase):
 
     def test_bad_input_is_400(self):
         self.assertEqual(self.post("/_pn/register", {"token": GOOD, "device_pub": "nope"})[0], 400)
+
+
+class FakeJellyfin(FakeMedia):
+    """``FakeMedia`` plus password and Quick Connect sign-in."""
+
+    SECRET = "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6"
+
+    def __init__(self):
+        super().__init__()
+        self.confirmed = False
+        self.qc_on = True
+
+    def __call__(self, method, url, body=None, headers=None, device=None, timeout=20, **kw):
+        path = url.split("8096", 1)[1]
+        self.calls.append((method, path, headers, body))
+        user = {"User": {"Id": "0123456789abcdef0123456789abcdef", "Name": "Anna"}, "AccessToken": GOOD,
+                "ServerId": "srv1"}
+        if path == "/Users/AuthenticateByName":
+            ok = body == {"Username": "anna", "Pw": "pw-123"}
+            return httpc.Response(200 if ok else 401, {}, json.dumps(user).encode() if ok else b"")
+        if path == "/QuickConnect/Initiate":
+            if not self.qc_on:
+                return httpc.Response(401, {}, b"")
+            return httpc.Response(200, {}, json.dumps({"Code": "123456", "Secret": self.SECRET}).encode())
+        if path.startswith("/QuickConnect/Connect?secret="):
+            if path.endswith(self.SECRET):
+                return httpc.Response(200, {}, json.dumps({"Authenticated": self.confirmed}).encode())
+            return httpc.Response(404, {}, b"")
+        if path == "/Users/AuthenticateWithQuickConnect" and self.confirmed and body == {"Secret": self.SECRET}:
+            return httpc.Response(200, {}, json.dumps(user).encode())
+        return super().__call__(method, url, body, headers, device, timeout)
+
+
+class SignInTest(unittest.TestCase):
+    DEV = {"client": "Moonfin", "device": "Shield", "device_id": "abc123", "version": "1.2.0"}
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        store = Store(os.path.join(self.tmp, "agent.json"))
+        store.update("pushping", {"enabled": True, "media_url": "http://192.168.1.10:8096"})
+        self.media = FakeJellyfin()
+        self.devices = Devices(self.tmp, store, request=self.media)
+        self.server = _Server(("127.0.0.1", 0), self.devices, Sessions())
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+        self.addCleanup(self.server.server_close)
+        self.addCleanup(self.server.shutdown)
+
+    def post(self, path, body):
+        return DeviceApiTest.post(self, path, body)
+
+    def get(self, path):
+        conn = http.client.HTTPConnection("127.0.0.1", self.server.server_address[1], timeout=5)
+        conn.request("GET", path)
+        res = conn.getresponse()
+        data = res.read()
+        conn.close()
+        return res, data
+
+    def test_password_login_returns_token_and_registers(self):
+        status, data = self.post("/_pn/login", dict(self.DEV, user="anna", password="pw-123"))
+        self.assertEqual((status, data["token"], data["user_name"], data["server_id"]), (200, GOOD, "Anna", "srv1"))
+        auth = self.media.calls[0][2]["Authorization"]
+        self.assertIn('Client="Moonfin"', auth)
+        self.assertIn('DeviceId="abc123"', auth)
+        status, _ = self.post("/_pn/register", {"token": data["token"], "device_pub": PUB})
+        self.assertEqual(status, 200)
+
+    def test_wrong_password_is_401(self):
+        self.assertEqual(self.post("/_pn/login", {"user": "anna", "password": "nope"})[0], 401)
+
+    def test_device_fields_cannot_break_the_header(self):
+        self.post("/_pn/login", {"user": "anna", "password": "pw-123", "client": 'x", Token="evil'})
+        self.assertNotIn('Token="evil', self.media.calls[0][2]["Authorization"])
+
+    def test_code_flow(self):
+        status, start = self.post("/_pn/code/start", self.DEV)
+        self.assertEqual((status, start["code"]), (200, "123456"))
+        status, data = self.post("/_pn/code/check", {"secret": start["secret"]})
+        self.assertEqual((status, data), (200, {"pending": True}))
+        self.media.confirmed = True
+        status, data = self.post("/_pn/code/check", {"secret": start["secret"]})
+        self.assertEqual((status, data["token"]), (200, GOOD))
+
+    def test_code_off_is_409(self):
+        self.media.qc_on = False
+        self.assertEqual(self.post("/_pn/code/start", {})[0], 409)
+
+    def test_unknown_secret_is_401(self):
+        self.assertEqual(self.post("/_pn/code/check", {"secret": "f" * 32})[0], 401)
+
+    def test_code_starts_are_limited(self):
+        statuses = [self.post("/_pn/code/start", {})[0] for _ in range(12)]
+        self.assertEqual((statuses[0], statuses[-1]), (200, 429))
+
+    def test_page_is_neutral(self):
+        res, data = self.get("/_pn/")
+        page = data.decode().lower()
+        self.assertEqual(res.status, 200)
+        self.assertIn("default-src 'none'", res.getheader("Content-Security-Policy"))
+        for word in ("jellyfin", "emby", "portnook", "mediaserver", "media server", "film", "server"):
+            self.assertNotIn(word, page)
+        self.assertNotIn("portnook", (res.getheader("Server") or "").lower())
+
+    def test_bare_prefix_redirects(self):
+        res, _ = self.get("/_pn?client=x")
+        self.assertEqual((res.status, res.getheader("Location")), (301, "/_pn/?client=x"))
 
 
 class FakeEgress:

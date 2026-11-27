@@ -3,7 +3,12 @@
 The proxy (NPM or Zoraxy) forwards ``https://<entry>/_pn/`` to ``http://<portnook>:<port>/_pn/``. A proxy that
 strips the prefix works too: ``/hello`` is the same as ``/_pn/hello``.
 
-* ``GET  /_pn/hello``: ``{"ok": true}`` (lets the app tell portnook from the media server).
+* ``GET  /_pn/``: neutral sign-in page (code or user and password); it names neither portnook nor the media
+  server. Device data for the media server (``client``, ``device``, ``device_id``, ``version``) come as query.
+* ``GET  /_pn/hello``: ``{"ok": true}`` (lets the app tell this API from the media server).
+* ``POST /_pn/login``: ``{user, password, client?, device?, device_id?, version?}`` -> media server token.
+* ``POST /_pn/code/start``: ``{client?, ...}`` -> ``{code, secret}`` (Quick Connect).
+* ``POST /_pn/code/check``: ``{secret, client?, ...}`` -> ``{pending: true}`` or the media server token.
 * ``POST /_pn/register``: ``{token, device_pub, push_token?, platform?, name?}`` -> device id, drop URL,
   signing key.
 * ``POST /_pn/device``: ``{token, device_id, device_pub?, push_token?}`` -> key rotation / new push token.
@@ -15,15 +20,20 @@ never stored or logged. Failed checks are rate limited per client address.
 import http.server
 import ipaddress
 import json
+import os
 import socketserver
 import threading
 
 from .auth import Sessions
 from .log import log
 from .pushdevices import AuthError
+from .pushlogin import Login, LoginUnavailable
 from .validate import ValidationError
 
 MAX_BODY = 16 * 1024
+PAGE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "web", "signin.html")
+PAGE_CSP = ("default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; "
+            "base-uri 'none'; form-action 'none'")
 
 
 def _route(raw):
@@ -40,10 +50,11 @@ class _Server(socketserver.ThreadingMixIn, http.server.HTTPServer):
         super().__init__(addr, _Handler)
         self.devices = devices
         self.limiter = limiter
+        self.login = Login(devices)
 
 
 class _Handler(http.server.BaseHTTPRequestHandler):
-    server_version = "portnook"
+    server_version = "web"
     sys_version = ""
 
     def log_message(self, fmt, *args):  # no request log (tokens travel in bodies)
@@ -84,14 +95,40 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             raise ValidationError("Kein JSON-Objekt.")
         return data
 
+    def _page(self):
+        try:
+            with open(PAGE, "rb") as fh:
+                data = fh.read()
+        except OSError:
+            return self._send(404, {"error": "not found"})
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Security-Policy", PAGE_CSP)
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.end_headers()
+        self.wfile.write(data)
+
     def do_GET(self):
-        if _route(self.path) == "/hello":
-            return self._send(200, {"ok": True, "service": "portnook push"})
+        raw = self.path.split("?", 1)[0]
+        if raw == "/_pn":
+            self.send_response(301)
+            self.send_header("Location", "/_pn/" + ("?" + self.path.split("?", 1)[1] if "?" in self.path else ""))
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        path = _route(self.path)
+        if path in ("/", "/index.html"):
+            return self._page()
+        if path == "/hello":
+            return self._send(200, {"ok": True, "v": 1})
         self._send(404, {"error": "not found"})
 
     def do_POST(self):
         path = _route(self.path)
-        if path not in ("/register", "/device"):
+        if path not in ("/register", "/device", "/login", "/code/start", "/code/check"):
             self.close_connection = True
             return self._send(404, {"error": "not found"})
         ip = self.client_ip
@@ -101,11 +138,24 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             return self._send(429, {"error": "too many attempts"})
         try:
             body = self._body()
-            token = body.pop("token", "")
-            if path == "/register":
-                answer = self.server.devices.register(token, body)
+            login = self.server.login
+            if path == "/login":
+                answer = login.password(body)
+            elif path == "/code/start":  # counts as an attempt: every start makes the media server keep a code
+                limiter.fail(ip)
+                return self._send(200, login.code_start(body))
+            elif path == "/code/check":
+                answer = login.code_check(body)
+                if answer.get("pending"):
+                    return self._send(200, answer)
             else:
-                answer = self.server.devices.update(token, body)
+                token = body.pop("token", "")
+                if path == "/register":
+                    answer = self.server.devices.register(token, body)
+                else:
+                    answer = self.server.devices.update(token, body)
+        except LoginUnavailable:
+            return self._send(409, {"error": "not available"})
         except AuthError as err:
             limiter.fail(ip)
             log("push ping refused for %s: %s", ip, str(err)[:120])

@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Anmelden</title>
+<style>
+:root { --bg: #f6f6f4; --card: #fff; --text: #1d1d1b; --muted: #6b6b66; --line: #dcdcd6; --acc: #3a3a36; --err: #b3261e; }
+@media (prefers-color-scheme: dark) { :root { --bg: #161614; --card: #22221f; --text: #ececea; --muted: #a3a39d; --line: #3a3a36; --acc: #dcdcd6; --err: #f2b8b5; } }
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px;
+  background: var(--bg); color: var(--text); font: 16px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { width: 100%; max-width: 360px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 24px; }
+h1 { font-size: 20px; margin: 0 0 16px; }
+.tabs { display: flex; gap: 6px; margin-bottom: 18px; }
+.tabs button { flex: 1; background: none; border: 1px solid var(--line); color: var(--muted); }
+.tabs button.on { border-color: var(--acc); color: var(--text); font-weight: 600; }
+label { display: block; font-size: 14px; margin: 10px 0 4px; color: var(--muted); }
+input { width: 100%; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); font: inherit; }
+button { padding: 10px 14px; border-radius: 8px; border: 1px solid var(--acc); background: var(--acc); color: var(--card); font: inherit; cursor: pointer; }
+.go { width: 100%; margin-top: 16px; }
+.code { font: 600 34px/1.2 ui-monospace, Menlo, monospace; letter-spacing: 6px; text-align: center; padding: 14px 0; }
+.hint { color: var(--muted); font-size: 14px; }
+.err { color: var(--err); font-size: 14px; min-height: 20px; margin-top: 12px; }
+.hidden { display: none; }
+</style>
+</head>
+<body>
+<main>
+  <h1 data-t="title">Anmelden</h1>
+  <div class="tabs"><button type="button" class="on" data-tab="code" data-t="tab_code">Code</button>
+    <button type="button" data-tab="pw" data-t="tab_pw">Benutzer und Passwort</button></div>
+  <section id="t-code">
+    <p class="hint" data-t="code_hint">Code anfordern und auf einem Gerät bestätigen, auf dem du schon angemeldet bist.</p>
+    <div class="code hidden" id="code"></div>
+    <button type="button" class="go" id="code-go" data-t="code_go">Code anfordern</button>
+  </section>
+  <section id="t-pw" class="hidden">
+    <form id="pw-form" autocomplete="on">
+      <label for="user" data-t="user">Benutzer</label><input id="user" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+      <label for="pass" data-t="pass">Passwort</label><input id="pass" name="password" type="password" autocomplete="current-password">
+      <button type="submit" class="go" data-t="pw_go">Anmelden</button>
+    </form>
+  </section>
+  <div class="err" id="err" role="alert"></div>
+</main>
+<script>
+"use strict";
+const T = { en: { title: "Sign in", tab_code: "Code", tab_pw: "User and password", user: "User", pass: "Password",
+  code_hint: "Request a code and confirm it on a device where you are already signed in.", code_go: "Request code",
+  code_wait: "Waiting for confirmation …", pw_go: "Sign in", done: "Signed in.", fail: "Sign-in failed.",
+  off: "Sign-in by code is not available.", busy: "Too many attempts. Try again later." },
+  de: { code_wait: "Warte auf Bestätigung …", done: "Angemeldet.", fail: "Anmeldung fehlgeschlagen.",
+  off: "Anmeldung per Code ist nicht verfügbar.", busy: "Zu viele Versuche. Später erneut versuchen." } };
+const L = (navigator.language || "de").slice(0, 2) === "de" ? "de" : "en";
+const tx = (k) => (T[L] && T[L][k]) || T.de[k] || k;
+document.documentElement.lang = L;
+if (L !== "de") document.querySelectorAll("[data-t]").forEach((el) => { el.textContent = tx(el.dataset.t); });
+const $ = (id) => document.getElementById(id);
+const params = new URLSearchParams(location.search);
+const dev = { client: params.get("client") || "", device: params.get("device") || "", device_id: params.get("device_id") || "",
+  version: params.get("version") || "" };
+const base = location.pathname.replace(/\/[^/]*$/, "/");
+let poll = null;
+async function call(path, body) {
+  const res = await fetch(base + path, { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(Object.assign({}, dev, body)) });
+  let data = {};
+  try { data = await res.json(); } catch (e) { /* empty */ }
+  if (res.status === 429) throw new Error(tx("busy"));
+  if (res.status === 409) throw new Error(tx("off"));
+  if (!res.ok) throw new Error(tx("fail"));
+  return data;
+}
+function done(result) {
+  clearInterval(poll);
+  document.querySelector("main").innerHTML = "<h1>" + tx("done") + "</h1>";
+  if (typeof window.pnDone === "function") window.pnDone(result);
+  try { (window.opener || window.parent).postMessage({ type: "pn-login", result }, "*"); } catch (e) { /* none */ }
+}
+document.querySelectorAll("[data-tab]").forEach((b) => b.addEventListener("click", () => {
+  document.querySelectorAll("[data-tab]").forEach((x) => x.classList.toggle("on", x === b));
+  $("t-code").classList.toggle("hidden", b.dataset.tab !== "code");
+  $("t-pw").classList.toggle("hidden", b.dataset.tab !== "pw");
+  $("err").textContent = "";
+}));
+$("code-go").addEventListener("click", async () => {
+  $("err").textContent = ""; clearInterval(poll);
+  try {
+    const r = await call("code/start", {});
+    $("code").textContent = r.code; $("code").classList.remove("hidden");
+    $("code-go").disabled = true; $("code-go").textContent = tx("code_wait");
+    poll = setInterval(async () => {
+      try { const c = await call("code/check", { secret: r.secret }); if (!c.pending) done(c); }
+      catch (e) { clearInterval(poll); $("err").textContent = e.message; $("code-go").disabled = false; $("code-go").textContent = tx("code_go"); }
+    }, 3000);
+  } catch (e) { $("err").textContent = e.message; }
+});
+$("pw-form").addEventListener("submit", async (ev) => {
+  ev.preventDefault(); $("err").textContent = "";
+  try { done(await call("login", { user: $("user").value, password: $("pass").value })); }
+  catch (e) { $("err").textContent = e.message; $("pass").value = ""; }
+});
+</script>
+</body>
+</html>
