@@ -93,7 +93,7 @@ async function codeStart() {
   try {
     const r = await call("code/start", {});
     $("code").textContent = r.code;
-    let left = 195;  // Jellyfin keeps a code 10 minutes (QuickConnectManager.Timeout); stop just before
+    let left = 195;  // a code is valid 10 minutes; stop just before
     poll = setInterval(async () => {
       if (--left < 0) return codeIdle("");
       try { const c = await call("code/check", { secret: r.secret }); if (!c.pending) done(c); }

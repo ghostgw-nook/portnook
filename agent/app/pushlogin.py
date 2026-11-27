@@ -102,7 +102,7 @@ class Login:
             raise AuthError("media server answer without code")
         return {"code": code, "secret": secret}
 
-    def code_check(self, body):
+    def code_check(self, body):  # Jellyfin keeps a code 10 minutes (QuickConnectManager.Timeout); signin.html waits ~9.75
         """``{"pending": true}`` until the code is confirmed, then the login result."""
         secret = str(body.get("secret") or "")
         if not _SECRET.fullmatch(secret):
