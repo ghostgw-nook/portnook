@@ -4,10 +4,12 @@ Runs in the monitor loop (``tick``). A device's drop is (re)published when
 
 * the target changed (VPN exit IP, forwarded port, certificate fingerprint),
 * the device is new or has a new key,
-* or the last upload is older than ``REFRESH`` (6 h), so a host that forgets files gets them back.
+* or, if the setting ``refresh_hours`` is above 0, the last upload is older than that, so a host that forgets
+  files gets them back. Default 0: only on a change.
 
 Files of removed devices are deleted. Uploads go through the VPN tunnel only (``internet`` route), never
-through the home line. After every round with changes the ``after_publish`` hooks run (FCM ping).
+through the home line. The ``after_publish`` hooks (FCM ping) run only when a device's content changed (new
+target or new key), not for a plain refresh: the app has nothing new to fetch then.
 
 Settings (``pushping`` section): ``upload_url`` (WebDAV folder), ``upload_user``, ``upload_pass``
 (write-only, never logged or returned).
@@ -20,7 +22,6 @@ import time
 from . import httpc, pushcrypto
 from .log import log
 
-REFRESH = 6 * 3600
 RETRY = 300
 
 
@@ -81,7 +82,8 @@ class Publisher:
         if now < self.rt["next_try"]:
             return
         target = self.target()
-        changed = 0
+        refresh = s["refresh_hours"] * 3600
+        changed = news = 0
         try:
             for path in self.devices.orphans():
                 self._send("DELETE", path)
@@ -89,11 +91,12 @@ class Publisher:
             if target is not None:
                 key = json.dumps(target, sort_keys=True)
                 for device in self.devices.list():
-                    if (device.get("published_key") == key and device.get("published_pub") == device["pub"]
-                            and now - device.get("published_at", 0) < REFRESH):
+                    same = device.get("published_key") == key and device.get("published_pub") == device["pub"]
+                    if same and (not refresh or now - device.get("published_at", 0) < refresh):
                         continue
                     self.publish(device, target, key, now)
                     changed += 1
+                    news += 0 if same else 1
         except (httpc.HttpError, pushcrypto.DropError, OSError) as err:
             self.rt.update({"last_error": str(err)[:200], "next_try": now + RETRY})
             log("push ping upload failed: %s", self.rt["last_error"])
@@ -102,6 +105,7 @@ class Publisher:
         if changed:
             self.rt["last_ok"] = now
             log("push ping: %d drop(s) published", changed)
+        if news:
             for hook in self.after_publish:
                 try:
                     hook()

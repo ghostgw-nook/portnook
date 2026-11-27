@@ -312,6 +312,8 @@
  "pp.dienstkonto_hochladen": "Save service account",
  "pp.einstellungen": "Settings",
  "pp.entfernt": "Removed.",
+ "pp.erneuern": "Upload again without a change every (hours)",
+ "pp.erneuern_hint": "0 = only when IP or port change (default). A number also uploads the files again at that interval, in case the storage loses files; no push for that.",
  "pp.fehler": "Error: ",
  "pp.firebase": "Firebase (Android push)",
  "pp.firebase_hilfe": "Service account JSON from the Firebase console (project settings, service accounts, new private key). The key is only stored, never shown. The push message carries no address, only “fetch again”.",

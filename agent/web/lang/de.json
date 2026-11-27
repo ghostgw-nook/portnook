@@ -312,6 +312,8 @@
  "pp.dienstkonto_hochladen": "Dienstkonto speichern",
  "pp.einstellungen": "Einstellungen",
  "pp.entfernt": "Entfernt.",
+ "pp.erneuern": "Ohne Wechsel neu hochladen alle (Stunden)",
+ "pp.erneuern_hint": "0 = nur bei einem Wechsel von IP oder Port (Standard). Eine Zahl lädt die Dateien zusätzlich in diesem Abstand neu hoch, falls die Ablage Dateien verliert; dafür gibt es keinen Push.",
  "pp.fehler": "Fehler: ",
  "pp.firebase": "Firebase (Android-Push)",
  "pp.firebase_hilfe": "Dienstkonto-JSON aus der Firebase-Konsole (Projekteinstellungen, Dienstkonten, neuer privater Schlüssel). Der Schlüssel wird nur gespeichert, nie angezeigt. Die Push-Meldung enthält keine Adresse, nur den Hinweis „neu abholen“.",

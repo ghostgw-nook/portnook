@@ -17,7 +17,7 @@ choose and nudges Android devices by push after a change. The storage only ever 
    user id is kept, never the token.
 2. **Device file.** portnook gives the device a random file name and writes `<random>.bin` to the storage,
    sealed for the device's own key and signed with portnook's key.
-3. **After a change** of exit IP or port (and every 6 hours) portnook rewrites the files. Android devices then get
+3. **After a change** of exit IP or port portnook rewrites the files. Android devices then get
    an empty Firebase message ("fetch again"); the message carries no address.
 4. **On every app start** the app fetches its file and checks the signature.
 
@@ -54,6 +54,8 @@ Page **Redirect** → **Push ping for apps**:
 
 - **Turn on push ping**, **Device API port** (8099),
 - **Media server on the LAN**, e.g. `http://192.168.1.30:8096` (for the login check),
+- **Upload again without a change every (hours)**: `0` (default) uploads only when IP or port change. A number
+  also rewrites the files at that interval, in case the storage loses files; there is no push for that,
 - **WebDAV folder**, **User**, **Password** (write-only), **Fetch address** (optional),
 - **Save**. The card **Status** shows the device API, the last upload and Firebase.
 

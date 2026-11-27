@@ -6,7 +6,8 @@ keeps per device: its X25519 public key, its push token, a random drop path and 
 
 * State in ``<data>/push/devices.json`` (600, atomic). The signing key is ``<data>/push/sign.pem`` (600).
 * Settings (``pushping`` section of the store): ``enabled``, ``port`` (device API), ``media_url`` (LAN address
-  of the media server), ``drop_base`` (public base URL of the zero-trust host).
+  of the media server), ``drop_base`` (public base URL of the zero-trust host), ``refresh_hours`` (rewrite the
+  drops this often even without a change, 0 = only on a change; default 0, owner 2026-11-27).
 * Tokens of the media server are never stored or logged; only the user id they belong to.
 """
 
@@ -26,6 +27,7 @@ NAME_MAX = 40
 PUSH_TOKEN_MAX = 4096
 PLATFORMS = ("android", "ios", "tvos", "other")
 DEFAULT_PORT = 8099
+REFRESH_MAX_HOURS = 168
 _HEX64 = re.compile(r"[0-9a-f]{64}")
 _ID = re.compile(r"[0-9a-f]{16}")
 _TOKEN = re.compile(r"[A-Za-z0-9._~+/=-]{8,512}")
@@ -76,7 +78,8 @@ class Devices:
     def settings(self):
         st = self.store.section("pushping")
         return {"enabled": st.get("enabled") is True, "port": int(st.get("port") or DEFAULT_PORT),
-                "media_url": st.get("media_url") or "", "drop_base": st.get("drop_base") or ""}
+                "media_url": st.get("media_url") or "", "drop_base": st.get("drop_base") or "",
+                "refresh_hours": int(st.get("refresh_hours") or 0)}
 
     def set_settings(self, body):
         values = {"enabled": body.get("enabled") is True}
@@ -84,6 +87,13 @@ class Devices:
         if not 1024 <= port <= 65535:
             raise ValidationError("Port ungültig.")
         values["port"] = port
+        try:
+            hours = int(body.get("refresh_hours") or 0)
+        except (TypeError, ValueError):
+            hours = -1
+        if not 0 <= hours <= REFRESH_MAX_HOURS:
+            raise ValidationError("Erneuerung: 0 bis %d Stunden." % REFRESH_MAX_HOURS)
+        values["refresh_hours"] = hours
         for key in ("media_url", "drop_base"):
             url = str(body.get(key) or "").strip().rstrip("/")
             if url and not re.fullmatch(r"https?://[A-Za-z0-9.\-:\[\]]+(/[A-Za-z0-9._~/-]*)?", url):

@@ -661,7 +661,9 @@ h3 { font-size: 14px; margin: 16px 0 4px; }
     <div class="cols">
       <div><label for="pp-port">{{pp.port}}</label><input type="text" id="pp-port" inputmode="numeric" placeholder="8099"></div>
       <div><label for="pp-media">{{pp.mediaserver}}</label><input type="text" id="pp-media" placeholder="http://192.168.1.30:8096" spellcheck="false" autocomplete="off"></div>
+      <div><label for="pp-refresh">{{pp.erneuern}}</label><input type="text" id="pp-refresh" inputmode="numeric" placeholder="0"></div>
     </div>
+    <p class="hint">{{pp.erneuern_hint}}</p>
     <h3>{{pp.ablage}}</h3>
     <div class="cols">
       <div><label for="pp-up">{{pp.webdav}}</label><input type="text" id="pp-up" placeholder="https://dav.example.ch/pn" spellcheck="false" autocomplete="off"></div>
@@ -1624,6 +1626,7 @@ async function refreshPushPing() {
   if (!S.ppFilled) {
     S.ppFilled = true;
     $("pp-on").checked = s.enabled; $("pp-port").value = s.port || ""; $("pp-media").value = s.media_url || "";
+    $("pp-refresh").value = s.refresh_hours || 0;
     $("pp-up").value = up.upload_url || ""; $("pp-user").value = up.upload_user || ""; $("pp-base").value = s.drop_base || "";
   }
   $("pp-pass-state").textContent = up.upload_pass_set ? tx("js.gespeichert") : "";
@@ -1644,6 +1647,7 @@ async function refreshPushPing() {
 }
 $("pp-save").addEventListener("click", (ev) => busy(ev.target, async () => {
   const b = { enabled: $("pp-on").checked, port: $("pp-port").value.trim() || 8099, media_url: $("pp-media").value.trim(),
+              refresh_hours: $("pp-refresh").value.trim() || 0,
               drop_base: $("pp-base").value.trim(), upload_url: $("pp-up").value.trim(), upload_user: $("pp-user").value.trim() };
   if ($("pp-pass").value) b.upload_pass = $("pp-pass").value;
   try { await api("POST", "/api/pushping", b); $("pp-pass").value = ""; msg("pp-msg", "ok", tx("js.gespeichert_3")); }

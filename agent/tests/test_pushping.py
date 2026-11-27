@@ -249,14 +249,33 @@ class PublisherTest(unittest.TestCase):
         self.assertEqual(len(self.host.calls), 1)
         self.assertEqual(len(self.pings), 1)
 
-    def test_port_change_and_refresh_republish(self):
+    def test_port_change_republishes_and_pings(self):
         self.pub.tick()
         self.agent.port = 40000
         self.pub.tick()
         self.assertEqual((self.opened()["url"], self.opened()["seq"]), ("https://jf.familie-muster.example.ch:40000", 2))
-        self.now[0] += 6 * 3600 + 1
+        self.assertEqual(len(self.pings), 2)
+
+    def test_no_refresh_by_default(self):
         self.pub.tick()
-        self.assertEqual(self.opened()["seq"], 3)
+        self.now[0] += 30 * 24 * 3600
+        self.pub.tick()
+        self.assertEqual((self.opened()["seq"], len(self.host.calls)), (1, 1))
+
+    def test_refresh_when_set_without_ping(self):
+        self.devices.set_settings({"enabled": True, "media_url": "http://192.168.1.10:8096",
+                                   "upload_url": "https://dav.example.ch/pn", "refresh_hours": 12})
+        self.pub.tick()
+        self.now[0] += 11 * 3600
+        self.pub.tick()
+        self.assertEqual(self.opened()["seq"], 1)
+        self.now[0] += 3600 + 1
+        self.pub.tick()
+        self.assertEqual((self.opened()["seq"], len(self.pings)), (2, 1))
+
+    def test_refresh_hours_checked(self):
+        with self.assertRaises(ValidationError):
+            self.devices.set_settings({"enabled": True, "media_url": "http://192.168.1.10:8096", "refresh_hours": 500})
 
     def test_no_target_no_upload(self):
         self.agent.ip = ""
