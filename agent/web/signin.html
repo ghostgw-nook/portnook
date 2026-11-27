@@ -13,9 +13,8 @@ body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify
   background: var(--bg); color: var(--text); font: 16px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
 main { width: 100%; max-width: 360px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 24px; }
 h1 { font-size: 20px; margin: 0 0 16px; }
-.tabs { display: flex; gap: 6px; margin-bottom: 18px; }
-.tabs button { flex: 1; background: none; border: 1px solid var(--line); color: var(--muted); }
-.tabs button.on { border-color: var(--acc); color: var(--text); font-weight: 600; }
+.link { display: block; width: 100%; margin-top: 14px; background: none; border: none; color: var(--muted);
+  text-decoration: underline; font-size: 14px; padding: 6px; }
 label { display: block; font-size: 14px; margin: 10px 0 4px; color: var(--muted); }
 input { width: 100%; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); font: inherit; }
 button { padding: 10px 14px; border-radius: 8px; border: 1px solid var(--acc); background: var(--acc); color: var(--card); font: inherit; cursor: pointer; }
@@ -29,12 +28,12 @@ button { padding: 10px 14px; border-radius: 8px; border: 1px solid var(--acc); b
 <body>
 <main>
   <h1 data-t="title">Anmelden</h1>
-  <div class="tabs"><button type="button" class="on" data-tab="code" data-t="tab_code">Code</button>
-    <button type="button" data-tab="pw" data-t="tab_pw">Benutzer und Passwort</button></div>
   <section id="t-code">
-    <p class="hint" data-t="code_hint">Code anfordern und auf einem Gerät bestätigen, auf dem du schon angemeldet bist.</p>
-    <div class="code hidden" id="code"></div>
-    <button type="button" class="go" id="code-go" data-t="code_go">Code anfordern</button>
+    <p class="hint" data-t="code_hint">Bestätige diesen Code auf einem Gerät, auf dem du schon angemeldet bist.</p>
+    <div class="code" id="code">······</div>
+    <p class="hint" id="code-state" data-t="code_wait">Warte auf Bestätigung …</p>
+    <button type="button" class="go hidden" id="code-go" data-t="code_go">Neuen Code anfordern</button>
+    <button type="button" class="link" data-tab="pw" data-t="to_pw">Mit Benutzer und Passwort fortfahren</button>
   </section>
   <section id="t-pw" class="hidden">
     <form id="pw-form" autocomplete="on">
@@ -42,13 +41,15 @@ button { padding: 10px 14px; border-radius: 8px; border: 1px solid var(--acc); b
       <label for="pass" data-t="pass">Passwort</label><input id="pass" name="password" type="password" autocomplete="current-password">
       <button type="submit" class="go" data-t="pw_go">Anmelden</button>
     </form>
+    <button type="button" class="link" data-tab="code" data-t="to_code">Zurück zur Anmeldung mit Code</button>
   </section>
   <div class="err" id="err" role="alert"></div>
 </main>
 <script>
 "use strict";
-const T = { en: { title: "Sign in", tab_code: "Code", tab_pw: "User and password", user: "User", pass: "Password",
-  code_hint: "Request a code and confirm it on a device where you are already signed in.", code_go: "Request code",
+const T = { en: { title: "Sign in", user: "User", pass: "Password",
+  code_hint: "Confirm this code on a device where you are already signed in.", code_go: "Request a new code",
+  to_pw: "Continue with user and password", to_code: "Back to sign-in with code",
   code_wait: "Waiting for confirmation …", pw_go: "Sign in", done: "Signed in.", fail: "Sign-in failed.",
   off: "Sign-in by code is not available.", busy: "Too many attempts. Try again later." },
   de: { code_wait: "Warte auf Bestätigung …", done: "Angemeldet.", fail: "Anmeldung fehlgeschlagen.",
@@ -64,8 +65,11 @@ const dev = { client: params.get("client") || "", device: params.get("device") |
 const base = location.pathname.replace(/\/[^/]*$/, "/");
 let poll = null;
 async function call(path, body) {
-  const res = await fetch(base + path, { method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(Object.assign({}, dev, body)) });
+  let res;
+  try {
+    res = await fetch(base + path, { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(Object.assign({}, dev, body)) });
+  } catch (e) { throw new Error(tx("fail")); }
   let data = {};
   try { data = await res.json(); } catch (e) { /* empty */ }
   if (res.status === 429) throw new Error(tx("busy"));
@@ -79,29 +83,38 @@ function done(result) {
   if (typeof window.pnDone === "function") window.pnDone(result);
   try { (window.opener || window.parent).postMessage({ type: "pn-login", result }, "*"); } catch (e) { /* none */ }
 }
-document.querySelectorAll("[data-tab]").forEach((b) => b.addEventListener("click", () => {
-  document.querySelectorAll("[data-tab]").forEach((x) => x.classList.toggle("on", x === b));
-  $("t-code").classList.toggle("hidden", b.dataset.tab !== "code");
-  $("t-pw").classList.toggle("hidden", b.dataset.tab !== "pw");
-  $("err").textContent = "";
-}));
-$("code-go").addEventListener("click", async () => {
+function codeIdle(text) {
+  clearInterval(poll); poll = null;
+  $("code-state").textContent = text || ""; $("code-go").classList.remove("hidden");
+}
+async function codeStart() {
   $("err").textContent = ""; clearInterval(poll);
+  $("code").textContent = "······"; $("code-go").classList.add("hidden"); $("code-state").textContent = tx("code_wait");
   try {
     const r = await call("code/start", {});
-    $("code").textContent = r.code; $("code").classList.remove("hidden");
-    $("code-go").disabled = true; $("code-go").textContent = tx("code_wait");
+    $("code").textContent = r.code;
+    let left = 100;  // about 5 minutes, then the code is likely expired
     poll = setInterval(async () => {
+      if (--left < 0) return codeIdle("");
       try { const c = await call("code/check", { secret: r.secret }); if (!c.pending) done(c); }
-      catch (e) { clearInterval(poll); $("err").textContent = e.message; $("code-go").disabled = false; $("code-go").textContent = tx("code_go"); }
+      catch (e) { $("err").textContent = e.message; codeIdle(""); }
     }, 3000);
-  } catch (e) { $("err").textContent = e.message; }
-});
+  } catch (e) { $("err").textContent = e.message; codeIdle(""); }
+}
+function showTab(tab) {
+  $("t-code").classList.toggle("hidden", tab !== "code");
+  $("t-pw").classList.toggle("hidden", tab !== "pw");
+  $("err").textContent = "";
+  if (tab === "code") codeStart(); else { codeIdle(""); $("user").focus(); }
+}
+document.querySelectorAll("[data-tab]").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
+$("code-go").addEventListener("click", codeStart);
 $("pw-form").addEventListener("submit", async (ev) => {
   ev.preventDefault(); $("err").textContent = "";
   try { done(await call("login", { user: $("user").value, password: $("pass").value })); }
   catch (e) { $("err").textContent = e.message; $("pass").value = ""; }
 });
+codeStart();
 </script>
 </body>
 </html>
