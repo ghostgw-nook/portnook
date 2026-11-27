@@ -644,6 +644,54 @@ h3 { font-size: 14px; margin: 16px 0 4px; }
     <div id="p-msg"></div>
   </div>
 </section>
+<!-- Push ping (0.40.0): devices fetch their address from a sealed drop -->
+<section id="v-pushping" class="hidden">
+  <h2 class="sec">{{pp.titel}}</h2>
+  <p class="lead">{{pp.lead}}</p>
+  <div class="card">
+    <h2><span class="dot" id="pp-dot"></span>{{ui.stand}}</h2>
+    <dl id="pp-state"></dl>
+  </div>
+  <div class="card">
+    <h2>{{pp.einstellungen}}</h2>
+    <details class="help"><summary>{{ui.hilfe}}</summary><p>{{pp.hilfe_ablauf}}</p>
+      <p>{{pp.hilfe_proxy}} <code>/_pn/</code> &rarr; <code>http://&lt;portnook&gt;:&lt;Port&gt;/_pn/</code></p>
+      <p>{{pp.hilfe_ablage}}</p></details>
+    <label class="inline"><input type="checkbox" id="pp-on"> {{pp.einschalten}}</label>
+    <div class="cols">
+      <div><label for="pp-port">{{pp.port}}</label><input type="text" id="pp-port" inputmode="numeric" placeholder="8099"></div>
+      <div><label for="pp-media">{{pp.mediaserver}}</label><input type="text" id="pp-media" placeholder="http://192.168.1.30:8096" spellcheck="false" autocomplete="off"></div>
+    </div>
+    <h3>{{pp.ablage}}</h3>
+    <div class="cols">
+      <div><label for="pp-up">{{pp.webdav}}</label><input type="text" id="pp-up" placeholder="https://dav.example.ch/pn" spellcheck="false" autocomplete="off"></div>
+      <div><label for="pp-user">{{pp.benutzer}}</label><input type="text" id="pp-user" spellcheck="false" autocomplete="off"></div>
+      <div><label for="pp-pass">{{pp.passwort}} <span class="muted small" id="pp-pass-state"></span></label><input type="password" id="pp-pass" placeholder="{{myaddr.leer_lassen_unverandert}}" autocomplete="off"></div>
+      <div><label for="pp-base">{{pp.abruf}}</label><input type="text" id="pp-base" placeholder="https://dav.example.ch/pn" spellcheck="false" autocomplete="off"></div>
+    </div>
+    <p class="hint">{{pp.abruf_hint}}</p>
+    <div class="actions"><button class="primary" type="button" id="pp-save">{{myaddr.speichern}}</button></div>
+    <div id="pp-msg"></div>
+  </div>
+  <div class="card">
+    <h2>{{pp.firebase}}</h2>
+    <details class="help"><summary>{{ui.hilfe}}</summary><p>{{pp.firebase_hilfe}}</p></details>
+    <p class="small" id="pp-fcm-state"></p>
+    <label for="pp-sa">{{pp.dienstkonto}}</label>
+    <textarea id="pp-sa" rows="4" spellcheck="false" autocomplete="off" placeholder='{"type": "service_account", ...}'></textarea>
+    <div class="actions"><button type="button" id="pp-sa-up">{{pp.dienstkonto_hochladen}}</button>
+      <button type="button" id="pp-sa-clear">{{pp.dienstkonto_entfernen}}</button></div>
+    <div id="pp-fcm-msg"></div>
+  </div>
+  <div class="card">
+    <h2>{{pp.gerate}}</h2>
+    <div class="tablewrap"><table>
+      <thead><tr><th>{{vpn.name}}</th><th>{{pp.benutzer}}</th><th>{{pp.plattform}}</th><th>{{pp.push}}</th><th>{{pp.veroffentlicht}}</th><th></th></tr></thead>
+      <tbody id="pp-list"></tbody>
+    </table></div>
+    <div id="pp-list-msg"></div>
+  </div>
+</section>
 <section id="v-log" class="hidden">
   <h2 class="sec">{{ui.log}}</h2>
   <p class="lead">{{lead.log}}</p>
@@ -810,13 +858,13 @@ function readFile(input, target) {
 // ---- views ---------------------------------------------------------
 // A view (nav entry) shows one or more sections.
 const SECTIONS = { login: ["login"], wizard: ["wizard"], status: ["status", "log"], vpn: ["vpn"], myaddr: ["myaddr", "cert"],
-  redirect: ["redirect"], system: ["settings", "push", "log"] };
+  redirect: ["redirect", "pushping"], system: ["settings", "push", "log"] };
 const ALL_SECTIONS = [].concat(...Object.values(SECTIONS));
 const HASH = { vpn: "#verbindung", myaddr: "#namen", redirect: "#weiterleitung", system: "#system" };
 // links from before 0.15.0
 const OLD_HASH = { "#vpn": "vpn", "#myaddr": "myaddr", "#zertifikat": "myaddr", "#rewrite": "redirect", "#redirect": "redirect",
   "#push": "system", "#einstellungen": "system", "#log": "system" };
-const REFRESH = { status: refresh, vpn: refresh, myaddr: refreshCert, redirect: refreshRedirect,
+const REFRESH = { status: refresh, vpn: refresh, myaddr: refreshCert, redirect: () => { refreshRedirect(); refreshPushPing(); },
   system: () => { refresh(); refreshPush(); } };
 function viewOfHash(h) {
   return OLD_HASH[h] || Object.keys(HASH).find((v) => HASH[v] === h) || "status";
@@ -839,7 +887,7 @@ function show(view) {
   });
   clearInterval(S.timer); S.timer = null;
   if (view === "myaddr") S.certFilled = false;
-  if (view === "redirect") S.redirFilled = false;
+  if (view === "redirect") { S.redirFilled = false; S.ppFilled = false; }
   if (view === "system") S.pushFilled = false;
   if (view === "vpn") S.beFilled = false;
   const fn = REFRESH[view];
@@ -1567,6 +1615,61 @@ $("p-test").addEventListener("click", (ev) => busy(ev.target, async () => {
   } catch (e) { msg("p-msg", "err", esc(e.message)); }
   refreshPush();
 }));
+
+// ---- push ping (0.40.0): devices, drop upload, Firebase ------------------------------------
+async function refreshPushPing() {
+  let p;
+  try { p = await api("GET", "/api/pushping"); } catch (e) { return; }
+  const s = p.settings, up = p.upload, f = p.fcm;
+  if (!S.ppFilled) {
+    S.ppFilled = true;
+    $("pp-on").checked = s.enabled; $("pp-port").value = s.port || ""; $("pp-media").value = s.media_url || "";
+    $("pp-up").value = up.upload_url || ""; $("pp-user").value = up.upload_user || ""; $("pp-base").value = s.drop_base || "";
+  }
+  $("pp-pass-state").textContent = up.upload_pass_set ? tx("js.gespeichert") : "";
+  const rows = [[tx("pp.gerate_api"), !s.enabled ? tx("pp.aus") : p.api_port ? tx("pp.hort_auf") + p.api_port : tx("pp.nicht_bereit")],
+    [tx("pp.ablage"), !up.upload_url ? tx("js.kein_ziel_eingerichtet") : up.last_error ? tx("pp.fehler") + up.last_error :
+      up.last_ok ? tx("pp.ok") + age(up.last_ok) : tx("pp.noch_nichts")],
+    [tx("pp.firebase"), !f.account_set ? tx("pp.kein_konto") : f.last_error ? tx("pp.fehler") + f.last_error :
+      f.project_id + (f.last_ok ? tx("js.ok_3") + age(f.last_ok) + " (" + f.sent + ")" : "")],
+    [tx("pp.gerate"), String(p.devices.length)]];
+  if (p.sign_pub) rows.push([tx("pp.signatur"), p.sign_pub.slice(0, 16) + "…"]);
+  dot("pp-dot", !s.enabled ? "" : (!p.api_port || up.last_error || f.last_error) ? "err" : (up.upload_url && up.last_ok) ? "ok" : "warn");
+  $("pp-state").innerHTML = dl(rows);
+  $("pp-fcm-state").textContent = f.account_set ? tx("pp.projekt") + f.project_id : tx("pp.kein_konto");
+  $("pp-list").innerHTML = p.devices.length ? p.devices.map((d) => "<tr><td>" + esc(d.name) + "</td><td>" + esc(d.user_name) +
+    "</td><td>" + esc(d.platform) + "</td><td>" + esc(d.push ? tx("pp.ja") : tx("pp.nein")) + "</td><td>" +
+    esc(d.published_at ? age(d.published_at) : tx("js.nie")) + '</td><td><button type="button" data-pp-del="' + esc(d.id) + '">' +
+    esc(tx("js.loschen")) + "</button></td></tr>").join("") : '<tr><td colspan="6" class="muted">' + esc(tx("pp.keine_gerate")) + "</td></tr>";
+}
+$("pp-save").addEventListener("click", (ev) => busy(ev.target, async () => {
+  const b = { enabled: $("pp-on").checked, port: $("pp-port").value.trim() || 8099, media_url: $("pp-media").value.trim(),
+              drop_base: $("pp-base").value.trim(), upload_url: $("pp-up").value.trim(), upload_user: $("pp-user").value.trim() };
+  if ($("pp-pass").value) b.upload_pass = $("pp-pass").value;
+  try { await api("POST", "/api/pushping", b); $("pp-pass").value = ""; msg("pp-msg", "ok", tx("js.gespeichert_3")); }
+  catch (e) { msg("pp-msg", "err", esc(e.message)); }
+  refreshPushPing();
+}));
+$("pp-sa-up").addEventListener("click", (ev) => busy(ev.target, async () => {
+  try { await api("POST", "/api/pushping/fcm", { service_account: $("pp-sa").value }); $("pp-sa").value = ""; msg("pp-fcm-msg", "ok", tx("js.gespeichert_3")); }
+  catch (e) { msg("pp-fcm-msg", "err", esc(e.message)); }
+  refreshPushPing();
+}));
+$("pp-sa-clear").addEventListener("click", (ev) => busy(ev.target, async () => {
+  if (!confirm(tx("pp.dienstkonto_entfernen_frage"))) return;
+  try { await api("POST", "/api/pushping/fcm", { clear: true }); msg("pp-fcm-msg", "ok", tx("pp.entfernt")); }
+  catch (e) { msg("pp-fcm-msg", "err", esc(e.message)); }
+  refreshPushPing();
+}));
+document.addEventListener("click", (ev) => {
+  const b = ev.target.closest("button[data-pp-del]");
+  if (!b || !confirm(tx("pp.gerat_loschen_frage"))) return;
+  busy(b, async () => {
+    try { await api("POST", "/api/pushping/remove", { id: b.dataset.ppDel }); msg("pp-list-msg", "ok", tx("pp.entfernt")); }
+    catch (e) { msg("pp-list-msg", "err", esc(e.message)); }
+    refreshPushPing();
+  });
+});
 
 // ---- rewrite rules and further myaddr names (rows edited in place) -------------------------
 function delBtn() { return '<button type="button" data-del>' + esc(tx("js.loschen")) + "</button>"; }
