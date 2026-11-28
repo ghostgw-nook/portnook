@@ -714,3 +714,29 @@ class FcmTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WebUiTest(unittest.TestCase):
+    """0.40.0: the push ping card once shared ids and text keys with the PROXY protocol card."""
+
+    def setUp(self):
+        root = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "web")
+        with open(os.path.join(root, "index.html"), encoding="utf-8") as fh:
+            self.html = fh.read()
+        self.lang = {}
+        for name in ("de", "en"):
+            with open(os.path.join(root, "lang", name + ".json"), encoding="utf-8") as fh:
+                self.lang[name] = json.load(fh)
+
+    def test_no_duplicate_ids(self):
+        import collections
+        import re
+        ids = collections.Counter(re.findall(r'\bid="([\w-]+)"', self.html))
+        self.assertEqual([i for i, n in ids.items() if n > 1], [])
+
+    def test_every_text_key_exists_in_both_languages(self):
+        import re
+        used = set(re.findall(r"\{\{([\w.]+)\}\}", self.html)) | set(re.findall(r'tx\("([\w.]+)"\)', self.html))
+        for name, texts in self.lang.items():
+            with self.subTest(lang=name):
+                self.assertEqual(sorted(k for k in used if k not in texts), [])
