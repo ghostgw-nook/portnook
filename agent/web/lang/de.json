@@ -314,6 +314,7 @@
  "pp.app_konfig_speichern": "App-Konfiguration speichern",
  "pp.kein_cf_token": "kein Cloudflare-Token bei der Weiterleitung",
  "pp.abruf": "Abruf-Adresse für die Apps (leer = gleich)",
+ "pp.abruf_test": "Abruf durch die App",
  "pp.abruf_hint": "Das Passwort wird nie angezeigt. Leer lassen behält das gespeicherte.",
  "pp.aus": "aus",
  "pp.benutzer": "Benutzer",

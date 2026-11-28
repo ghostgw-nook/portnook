@@ -1651,11 +1651,12 @@ async function refreshPushPing() {
   const rows = [[tx("pp.gerate_api"), !s.enabled ? tx("pp.aus") : p.api_port ? tx("pp.hort_auf") + p.api_port : tx("pp.nicht_bereit")],
     [tx("pp.ablage"), where + " - " + (up.last_error ? tx("pp.fehler") + up.last_error
       : up.last_ok ? tx("pp.ok") + age(up.last_ok) : tx("pp.noch_nichts"))],
+    up.read_warning ? [tx("pp.abruf_test"), up.read_warning] : null,
     [tx("pp.firebase"), !f.account_set ? tx("pp.kein_konto") : f.last_error ? tx("pp.fehler") + f.last_error :
       f.project_id + (f.last_ok ? tx("js.ok_3") + age(f.last_ok) + " (" + f.sent + ")" : "")],
     [tx("pp.gerate"), String(p.devices.length)]];
   if (p.sign_pub) rows.push([tx("pp.signatur"), p.sign_pub.slice(0, 16) + "…"]);
-  dot("pp-dot", !s.enabled ? "" : (!p.api_port || up.last_error || f.last_error) ? "err" : up.last_ok ? "ok" : "warn");
+  dot("pp-dot", !s.enabled ? "" : (!p.api_port || up.last_error || f.last_error) ? "err" : up.read_warning ? "warn" : up.last_ok ? "ok" : "warn");
   $("pp-state").innerHTML = dl(rows);
   $("pp-fcm-state").textContent = f.account_set ? tx("pp.projekt") + f.project_id : tx("pp.kein_konto");
   $("pp-gs-state").textContent = (f.client_apps || []).join(", ");

@@ -314,6 +314,7 @@
  "pp.app_konfig_speichern": "Save app configuration",
  "pp.kein_cf_token": "no Cloudflare token at the redirect",
  "pp.abruf": "Fetch address for the apps (empty = same)",
+ "pp.abruf_test": "Fetch by the app",
  "pp.abruf_hint": "The password is never shown. Leave empty to keep the stored one.",
  "pp.aus": "off",
  "pp.benutzer": "User",

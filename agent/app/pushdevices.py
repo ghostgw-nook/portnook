@@ -201,6 +201,11 @@ class Devices:
         return user_id.lower(), _clean_name(user.get("Name"))
 
     # -- device changes ----------------------------------------------------------------
+    def drop_url(self, device_id):
+        """Public URL of a device's file (as the device gets it), ``""`` while there is none."""
+        device = self.get(device_id)
+        return self._answer(device)["drop_url"] if device else ""
+
     def _answer(self, device):
         st = self.store.section("pushping")
         kind = self.settings()["storage"]

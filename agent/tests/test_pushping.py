@@ -318,6 +318,8 @@ class FakeHost:
             return httpc.Response(201, {}, b"")
         if method == "DELETE":
             return httpc.Response(204 if self.files.pop(name, None) is not None else 404, {}, b"")
+        if method == "GET" and getattr(self, "files_public", False) and name in self.files:
+            return httpc.Response(200, {}, self.files[name])
         return httpc.Response(405, {}, b"")
 
 
@@ -356,7 +358,7 @@ class PublisherTest(unittest.TestCase):
         self.assertEqual(self.host.calls[0][3], "internet")
         self.assertTrue(self.host.calls[0][2]["Authorization"].startswith("Basic "))
         self.pub.tick()
-        self.assertEqual(len(self.host.calls), 1)
+        self.assertEqual(len([c for c in self.host.calls if c[0] == "PUT"]), 1)
         self.assertEqual(len(self.pings), 1)
 
     def test_port_change_republishes_and_pings(self):
@@ -370,11 +372,19 @@ class PublisherTest(unittest.TestCase):
         self.assertEqual(self.dev["drop_url"], "https://dav.example.ch/pn/%s.bin"
                          % self.devices.get(self.dev["device_id"])["path"])
 
+    def test_warns_when_the_file_is_not_public(self):
+        self.pub.tick()  # FakeHost answers GET with 405, like a WebDAV that wants a login to read
+        self.assertIn("405", self.pub.status()["read_warning"])
+        self.host.files_public = True
+        self.agent.port = 40000
+        self.pub.tick()
+        self.assertEqual(self.pub.status()["read_warning"], "")
+
     def test_no_refresh_by_default(self):
         self.pub.tick()
         self.now[0] += 30 * 24 * 3600
         self.pub.tick()
-        self.assertEqual((self.opened()["seq"], len(self.host.calls)), (1, 1))
+        self.assertEqual((self.opened()["seq"], len([c for c in self.host.calls if c[0] == "PUT"])), (1, 1))
 
     def test_refresh_when_set_without_ping(self):
         self.devices.set_settings({"enabled": True, "media_url": "http://192.168.1.10:8096",

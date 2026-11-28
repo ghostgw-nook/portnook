@@ -32,7 +32,7 @@ class Publisher:
         self.request = request
         self.clock = clock
         self.after_publish = []
-        self.rt = {"last_error": "", "last_ok": 0, "next_try": 0}
+        self.rt = {"last_error": "", "last_ok": 0, "next_try": 0, "read_warning": ""}
 
     # -- target ---------------------------------------------------------------------
     def target(self):
@@ -102,12 +102,33 @@ class Publisher:
         if done:
             self.rt["last_ok"] = now
             log("push ping: %d drop(s) published", len(done))
+            self.check_read(done[0][0]["id"])
         if news:
             for hook in self.after_publish:
                 try:
                     hook()
                 except Exception as err:  # a ping problem never stops the uploads
                     log("push ping hook failed: %s", err)
+
+    def check_read(self, device_id):
+        """The app fetches its file without a login: warn when that fails (e.g. WebDAV that wants a login to
+        read too). Only noted in the status, uploads go on."""
+        url = self.devices.drop_url(device_id)
+        if not url:
+            self.rt["read_warning"] = "keine Abruf-Adresse"
+            return
+        try:
+            res = self.request("GET", url, headers={"Cache-Control": "no-cache"},
+                               device=self.agent.egress.route("internet"), timeout=15)
+            status = res.status
+        except Exception as err:  # only a warning, never stops the round
+            status, reason = 0, str(err)[:120] or err.__class__.__name__
+        warning = "" if status == 200 else (
+            "Datei ohne Anmeldung nicht abrufbar (%s): öffentliche Abruf-Adresse eintragen"
+            % ("HTTP %d" % status if status else reason))
+        if warning != self.rt["read_warning"]:
+            log("push ping: %s", warning or "files readable without login")
+        self.rt["read_warning"] = warning
 
     def seal(self, device, target, now):
         seq = self.devices.next_seq(device["id"])
@@ -132,4 +153,5 @@ class Publisher:
                 "upload_user": st.get("upload_user") or "", "upload_pass_set": bool(st.get("upload_pass")),
                 "cf_base": st.get("cf_base") or "", "cf_ready": pushstore.CloudflareWorker(self).ready(),
                 "script_base": st.get("script_base") or "", "script_ready": pushstore.SshScript(self).ready(),
-                "last_ok": self.rt["last_ok"], "last_error": self.rt["last_error"]}
+                "last_ok": self.rt["last_ok"], "last_error": self.rt["last_error"],
+                "read_warning": self.rt["read_warning"]}
