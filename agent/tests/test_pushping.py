@@ -407,6 +407,17 @@ class PublisherTest(unittest.TestCase):
         self.pub.tick()
         self.assertEqual(self.opened()["url"], "https://jf.familie-muster.example.ch:51234")
 
+    def test_blocked_device_loses_its_file_and_comes_back(self):
+        self.pub.tick()
+        self.devices.set_blocked(self.dev["device_id"], True)
+        self.pub.tick()
+        self.assertEqual(self.host.files, {})
+        with self.assertRaises(ValidationError):
+            self.devices.update(GOOD, {"device_id": self.dev["device_id"], "push_token": "x"})
+        self.devices.set_blocked(self.dev["device_id"], False)
+        self.pub.tick()
+        self.assertEqual(self.opened()["url"], "https://jf.familie-muster.example.ch:51234")
+
     def test_removed_device_file_is_deleted(self):
         self.pub.tick()
         self.devices.remove(self.dev["device_id"])

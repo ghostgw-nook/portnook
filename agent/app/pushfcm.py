@@ -170,7 +170,8 @@ class Fcm:
     # -- ping --------------------------------------------------------------------------------
     def ping_all(self):
         """Ping every Android device that has a push token (hook of ``pushdrop.Publisher``)."""
-        targets = [d for d in self.devices.list() if d.get("push_token") and d.get("platform") in PLATFORMS]
+        targets = [d for d in self.devices.list()
+                   if d.get("push_token") and d.get("platform") in PLATFORMS and not d.get("blocked")]
         if not targets or not self.status()["account_set"]:
             return 0
         try:

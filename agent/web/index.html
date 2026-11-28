@@ -1661,7 +1661,9 @@ async function refreshPushPing() {
   $("pp-gs-state").textContent = (f.client_apps || []).join(", ");
   $("pp-list").innerHTML = p.devices.length ? p.devices.map((d) => "<tr><td>" + esc(d.name) + "</td><td>" + esc(d.user_name) +
     "</td><td>" + esc(d.platform) + "</td><td>" + esc(d.push ? tx("pp.ja") : tx("pp.nein")) + "</td><td>" +
-    esc(d.published_at ? age(d.published_at) : tx("js.nie")) + '</td><td><button type="button" data-pp-del="' + esc(d.id) + '">' +
+    esc(d.blocked ? tx("pp.gesperrt") : d.published_at ? age(d.published_at) : tx("js.nie")) +
+    '</td><td><button type="button" data-pp-block="' + esc(d.id) + '" data-on="' + (d.blocked ? "0" : "1") + '">' +
+    esc(d.blocked ? tx("pp.entsperren") : tx("pp.sperren")) + '</button> <button type="button" data-pp-del="' + esc(d.id) + '">' +
     esc(tx("js.loschen")) + "</button></td></tr>").join("") : '<tr><td colspan="6" class="muted">' + esc(tx("pp.keine_gerate")) + "</td></tr>";
 }
 function ppStorage() {
@@ -1695,6 +1697,15 @@ $("pp-sa-clear").addEventListener("click", (ev) => busy(ev.target, async () => {
   catch (e) { msg("pp-fcm-msg", "err", esc(e.message)); }
   refreshPushPing();
 }));
+document.addEventListener("click", (ev) => {
+  const b = ev.target.closest("button[data-pp-block]");
+  if (!b) return;
+  busy(b, async () => {
+    try { await api("POST", "/api/pushping/block", { id: b.dataset.ppBlock, blocked: b.dataset.on === "1" }); msg("pp-list-msg", "", ""); }
+    catch (e) { msg("pp-list-msg", "err", esc(e.message)); }
+    refreshPushPing();
+  });
+});
 document.addEventListener("click", (ev) => {
   const b = ev.target.closest("button[data-pp-del]");
   if (!b || !confirm(tx("pp.gerat_loschen_frage"))) return;

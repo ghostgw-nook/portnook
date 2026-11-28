@@ -75,6 +75,8 @@ class Publisher:
             if target is not None:
                 key = json.dumps(target, sort_keys=True)
                 for device in self.devices.list():
+                    if device.get("blocked"):
+                        continue
                     same = device.get("published_key") == key and device.get("published_pub") == device["pub"]
                     if same and (not refresh or now - device.get("published_at", 0) < refresh):
                         continue
@@ -84,7 +86,7 @@ class Publisher:
                     news += 0 if same else 1
             if store.whole and (done or orphans):
                 table = {d["path"]: base64.b64decode(d["published_drop"]) for d in self.devices.list()
-                         if d.get("published_drop")}
+                         if d.get("published_drop") and not d.get("blocked")}
                 table.update({d["path"]: drop for d, _, drop in done})
                 store.finish(table)
         except (httpc.HttpError, pushcrypto.DropError, OSError) as err:

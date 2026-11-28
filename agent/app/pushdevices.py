@@ -244,12 +244,30 @@ class Devices:
             device = self._devices.get(device_id) if _ID.fullmatch(device_id) else None
             if device is None or device["user_id"] != user_id:
                 raise AuthError("unknown device")
+            if device.get("blocked"):
+                raise ValidationError("Gerät gesperrt.")
             device.update(changes)
             device["updated"] = int(self.clock())
             self._save()
             answer = self._answer(device)
         log("push ping device %s updated (%s)", device_id, ", ".join(sorted(changes)) or "nothing")
         return answer
+
+    def set_blocked(self, device_id, blocked):
+        """Block a device (its file is deleted, no ping, no updates) or let it in again (file comes back)."""
+        with self._lock:
+            device = self._devices.get(str(device_id or ""))
+            if device is None:
+                raise ValidationError("Gerät nicht gefunden.")
+            blocked = blocked is True
+            if blocked and not device.get("blocked"):
+                self._orphans.append(device["path"])
+                for k in ("published_key", "published_drop", "published_at"):
+                    device.pop(k, None)
+            device["blocked"] = blocked
+            self._save()
+        log("push ping device %s %s", device_id, "blocked" if blocked else "unblocked")
+        return self.overview()
 
     def remove(self, device_id):
         with self._lock:
