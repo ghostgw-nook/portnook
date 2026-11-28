@@ -273,6 +273,20 @@ class SignInTest(unittest.TestCase):
             self.assertNotIn(word, page)
         self.assertNotIn("portnook", (res.getheader("Server") or "").lower())
 
+    def test_missing_device_id_gets_a_stable_one(self):
+        self.post("/_pn/code/start", {})
+        self.post("/_pn/code/start", {})
+        ids = [c[2]["Authorization"].split('DeviceId="', 1)[1].split('"', 1)[0] for c in self.media.calls]
+        self.assertTrue(ids[0].startswith("pn-"))
+        self.assertEqual(ids[0], ids[1])
+
+    def test_head_answers_like_get(self):
+        conn = http.client.HTTPConnection("127.0.0.1", self.server.server_address[1], timeout=5)
+        conn.request("HEAD", "/_pn/")
+        res = conn.getresponse()
+        self.assertEqual((res.status, res.read()), (200, b""))
+        conn.close()
+
     def test_bare_prefix_redirects(self):
         res, _ = self.get("/_pn?client=x")
         self.assertEqual((res.status, res.getheader("Location")), (301, "/_pn/?client=x"))

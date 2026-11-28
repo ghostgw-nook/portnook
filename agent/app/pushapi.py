@@ -17,6 +17,7 @@ strips the prefix works too: ``/hello`` is the same as ``/_pn/hello``.
 never stored or logged. Failed checks are rate limited per client address.
 """
 
+import hashlib
 import http.server
 import ipaddress
 import json
@@ -78,7 +79,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
-        self.wfile.write(data)
+        if not getattr(self, "_head_only", False):
+            self.wfile.write(data)
 
     def _body(self):
         try:
@@ -109,7 +111,15 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
         self.end_headers()
-        self.wfile.write(data)
+        if not getattr(self, "_head_only", False):
+            self.wfile.write(data)
+
+    def do_HEAD(self):  # proxies and health checks: same answer as GET, no body
+        self._head_only = True
+        try:
+            self.do_GET()
+        finally:
+            self._head_only = False
 
     def do_GET(self):
         raw = self.path.split("?", 1)[0]
@@ -138,6 +148,11 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             return self._send(429, {"error": "too many attempts"})
         try:
             body = self._body()
+            if not str(body.get("device_id") or "").strip():
+                # Jellyfin (12.x) refuses a sign-in without a device id; one per client address and browser keeps
+                # code start and check on the same device and doesn't replace other devices' sessions
+                seed = "%s|%s" % (ip, self.headers.get("User-Agent") or "")
+                body["device_id"] = "pn-" + hashlib.sha256(seed.encode()).hexdigest()[:20]
             login = self.server.login
             if path == "/login":
                 answer = login.password(body)
