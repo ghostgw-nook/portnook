@@ -693,6 +693,10 @@ h3 { font-size: 14px; margin: 16px 0 4px; }
     <textarea id="pp-sa" rows="4" spellcheck="false" autocomplete="off" placeholder='{"type": "service_account", ...}'></textarea>
     <div class="actions"><button type="button" id="pp-sa-up">{{pp.dienstkonto_hochladen}}</button>
       <button type="button" id="pp-sa-clear">{{pp.dienstkonto_entfernen}}</button></div>
+    <label for="pp-gs">{{pp.app_konfig}} <span class="muted small" id="pp-gs-state"></span></label>
+    <textarea id="pp-gs" rows="3" spellcheck="false" autocomplete="off" placeholder='{"project_info": ...}'></textarea>
+    <p class="hint">{{pp.app_konfig_hint}}</p>
+    <div class="actions"><button type="button" id="pp-gs-up">{{pp.app_konfig_speichern}}</button></div>
     <div id="pp-fcm-msg"></div>
   </div>
   <div class="card">
@@ -1654,6 +1658,7 @@ async function refreshPushPing() {
   dot("pp-dot", !s.enabled ? "" : (!p.api_port || up.last_error || f.last_error) ? "err" : up.last_ok ? "ok" : "warn");
   $("pp-state").innerHTML = dl(rows);
   $("pp-fcm-state").textContent = f.account_set ? tx("pp.projekt") + f.project_id : tx("pp.kein_konto");
+  $("pp-gs-state").textContent = (f.client_apps || []).join(", ");
   $("pp-list").innerHTML = p.devices.length ? p.devices.map((d) => "<tr><td>" + esc(d.name) + "</td><td>" + esc(d.user_name) +
     "</td><td>" + esc(d.platform) + "</td><td>" + esc(d.push ? tx("pp.ja") : tx("pp.nein")) + "</td><td>" +
     esc(d.published_at ? age(d.published_at) : tx("js.nie")) + '</td><td><button type="button" data-pp-del="' + esc(d.id) + '">' +
@@ -1676,6 +1681,11 @@ $("pp-save").addEventListener("click", (ev) => busy(ev.target, async () => {
 }));
 $("pp-sa-up").addEventListener("click", (ev) => busy(ev.target, async () => {
   try { await api("POST", "/api/pushping/fcm", { service_account: $("pp-sa").value }); $("pp-sa").value = ""; msg("pp-fcm-msg", "ok", tx("js.gespeichert_3")); }
+  catch (e) { msg("pp-fcm-msg", "err", esc(e.message)); }
+  refreshPushPing();
+}));
+$("pp-gs-up").addEventListener("click", (ev) => busy(ev.target, async () => {
+  try { await api("POST", "/api/pushping/fcm-app", { google_services: $("pp-gs").value }); $("pp-gs").value = ""; msg("pp-fcm-msg", "ok", tx("js.gespeichert_3")); }
   catch (e) { msg("pp-fcm-msg", "err", esc(e.message)); }
   refreshPushPing();
 }));

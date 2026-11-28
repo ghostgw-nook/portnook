@@ -74,6 +74,7 @@ class Devices:
         self._lock = threading.Lock()
         self._orphans = []
         self._devices = self._load()
+        self.fcm_options = None  # set by the agent: () -> Firebase client options for devices, or None
 
     # -- settings ----------------------------------------------------------------
     def settings(self):
@@ -206,8 +207,12 @@ class Devices:
         own = {"cloudflare": st.get("cf_base"), "script": st.get("script_base")}.get(kind, st.get("upload_url"))
         base = self.settings()["drop_base"] or own or ""  # empty = where the storage serves it
         pub = self.sign_pub()
-        return {"device_id": device["id"], "drop_url": "%s/%s.bin" % (base, device["path"]) if base else "",
-                "sign_pub": pub.hex() if pub else "", "seq": device["seq"]}
+        answer = {"device_id": device["id"], "drop_url": "%s/%s.bin" % (base, device["path"]) if base else "",
+                  "sign_pub": pub.hex() if pub else "", "seq": device["seq"]}
+        fcm = self.fcm_options() if self.fcm_options and device.get("platform") == "android" else None
+        if fcm:
+            answer["fcm"] = fcm
+        return answer
 
     def register(self, token, body):
         user_id, user_name = self.check_token(token)

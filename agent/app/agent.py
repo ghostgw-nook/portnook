@@ -112,6 +112,7 @@ class Agent:
         from .pushfcm import Fcm
         self.pushfcm = Fcm(self, self.pushping, clock=clock)
         self.pushdrop.after_publish.append(self.pushfcm.ping_all)
+        self.pushping.fcm_options = self.pushfcm.client_options
 
     # -- state helpers ----------------------------------------------
     def password_set(self):

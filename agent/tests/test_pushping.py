@@ -626,6 +626,27 @@ class FcmTest(unittest.TestCase):
             self.assertNotIn("PRIVATE KEY", fh.read())
         self.assertEqual(stat.S_IMODE(os.stat(self.fcm.key_path).st_mode), 0o600)
 
+    GS = {"project_info": {"project_number": "123456789012", "project_id": "demo-project"},
+          "client": [{"client_info": {"mobilesdk_app_id": "1:123456789012:android:abc",
+                                      "android_client_info": {"package_name": "org.moonfin.androidtv.test"}},
+                      "api_key": [{"current_key": "AIzaDemoKey"}]}]}
+
+    def test_app_config_goes_to_android_devices(self):
+        self.fcm.set_client({"google_services": json.dumps(self.GS)})
+        self.devices.fcm_options = self.fcm.client_options
+        android = self.devices.register(GOOD, {"device_pub": "ef" * 32, "platform": "android"})
+        ios = self.devices.register(GOOD, {"device_pub": "fe" * 32, "platform": "ios"})
+        self.assertEqual(android["fcm"], {"api_key": "AIzaDemoKey", "app_id": "1:123456789012:android:abc",
+                                          "project_id": "demo-project", "sender_id": "123456789012"})
+        self.assertNotIn("fcm", ios)
+        self.assertEqual(self.fcm.status()["client_apps"], ["org.moonfin.androidtv.test"])
+
+    def test_bad_app_config_is_refused(self):
+        for value in ("nope", json.dumps({"client": []}), json.dumps({"project_info": {"project_id": "x",
+                                                                                     "project_number": "1"}})):
+            with self.assertRaises(ValidationError):
+                self.fcm.set_client({"google_services": value})
+
     def test_bad_account_is_refused(self):
         for value in ("nope", json.dumps({"type": "user"}), json.dumps({"type": "service_account"})):
             with self.assertRaises(ValidationError):

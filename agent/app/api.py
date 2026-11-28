@@ -284,6 +284,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self._send(200, result)
             if path == "/api/pushping/fcm":
                 return self._send(200, self.agent.pushfcm.set_account(body))
+            if path == "/api/pushping/fcm-app":
+                return self._send(200, self.agent.pushfcm.set_client(body))
             if path == "/api/pushping/remove":
                 self.agent.pushping.remove(body.get("id"))
                 return self._send(200, self.agent.pushping.overview())
