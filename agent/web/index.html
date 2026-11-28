@@ -669,10 +669,19 @@ h3 { font-size: 14px; margin: 16px 0 4px; }
       <div><label for="pk-storage">{{pping.ablage_art}}</label><select id="pk-storage">
         <option value="cloudflare">{{pping.ablage_cloudflare}}</option>
         <option value="script">{{pping.ablage_script}}</option>
+        <option value="php">{{pping.ablage_php}}</option>
         <option value="webdav">{{pping.ablage_webdav}}</option></select></div>
     </div>
     <p class="hint" id="pk-cf-hint">{{pping.ablage_cloudflare_hint}}</p>
     <p class="hint" id="pk-script-hint">{{pping.ablage_script_hint}}</p>
+    <div id="pk-php">
+      <p class="hint">{{pping.ablage_php_hint}}</p>
+      <div class="cols">
+        <div><label for="pk-php-url">{{pping.php_url}}</label><input type="text" id="pk-php-url" placeholder="https://www.example.ch/pn.php" spellcheck="false" autocomplete="off"></div>
+      </div>
+      <div class="actions"><button type="button" id="pk-php-get">{{pping.php_download}}</button>
+        <button type="button" id="pk-php-new">{{pping.php_new_key}}</button></div>
+    </div>
     <div class="cols" id="pk-dav">
       <div><label for="pk-up">{{pping.webdav}}</label><input type="text" id="pk-up" placeholder="https://dav.example.ch/pn" spellcheck="false" autocomplete="off"></div>
       <div><label for="pk-user">{{pping.benutzer}}</label><input type="text" id="pk-user" spellcheck="false" autocomplete="off"></div>
@@ -1642,10 +1651,11 @@ async function refreshPushPing() {
     $("pk-on").checked = s.enabled; $("pk-port").value = s.port || ""; $("pk-media").value = s.media_url || "";
     $("pk-refresh").value = s.refresh_hours || 0;
     $("pk-storage").value = s.storage || "webdav"; ppStorage();
-    $("pk-up").value = up.upload_url || ""; $("pk-user").value = up.upload_user || ""; $("pk-base").value = s.drop_base || "";
+    $("pk-up").value = up.upload_url || ""; $("pk-php-url").value = up.php_url || ""; $("pk-user").value = up.upload_user || ""; $("pk-base").value = s.drop_base || "";
   }
   $("pk-pass-state").textContent = up.upload_pass_set ? tx("js.gespeichert") : "";
   const where = s.storage === "cloudflare" ? (up.cf_base || (up.cf_ready ? tx("pping.noch_nichts") : tx("pping.kein_cf_token")))
+    : s.storage === "php" ? (up.php_url || tx("js.kein_ziel_eingerichtet"))
     : s.storage === "script" ? (up.script_ready ? (up.script_base || tx("pping.noch_nichts")) : tx("pping.kein_script"))
     : (up.upload_url || tx("js.kein_ziel_eingerichtet"));
   const rows = [[tx("pping.gerate_api"), !s.enabled ? tx("pping.aus") : p.api_port ? tx("pping.hort_auf") + p.api_port : tx("pping.nicht_bereit")],
@@ -1671,11 +1681,12 @@ function ppStorage() {
   const v = $("pk-storage").value;
   $("pk-dav").classList.toggle("hidden", v !== "webdav"); $("pk-cf-hint").classList.toggle("hidden", v !== "cloudflare");
   $("pk-script-hint").classList.toggle("hidden", v !== "script");
+  $("pk-php").classList.toggle("hidden", v !== "php");
 }
 $("pk-storage").addEventListener("change", ppStorage);
 $("pk-save").addEventListener("click", (ev) => busy(ev.target, async () => {
   const b = { enabled: $("pk-on").checked, storage: $("pk-storage").value, port: $("pk-port").value.trim() || 8099, media_url: $("pk-media").value.trim(),
-              refresh_hours: $("pk-refresh").value.trim() || 0,
+              refresh_hours: $("pk-refresh").value.trim() || 0, php_url: $("pk-php-url").value.trim(),
               drop_base: $("pk-base").value.trim(), upload_url: $("pk-up").value.trim(), upload_user: $("pk-user").value.trim() };
   if ($("pk-pass").value) b.upload_pass = $("pk-pass").value;
   try { await api("POST", "/api/pushping", b); $("pk-pass").value = ""; msg("pk-msg", "ok", tx("js.gespeichert_3")); }
@@ -1686,6 +1697,12 @@ $("pk-sa-up").addEventListener("click", (ev) => busy(ev.target, async () => {
   try { await api("POST", "/api/pushping/fcm", { service_account: $("pk-sa").value }); $("pk-sa").value = ""; msg("pk-fcm-msg", "ok", tx("js.gespeichert_3")); }
   catch (e) { msg("pk-fcm-msg", "err", esc(e.message)); }
   refreshPushPing();
+}));
+$("pk-php-get").addEventListener("click", () => { location.href = "/api/pushping/pn.php"; });  // attachment: downloads
+$("pk-php-new").addEventListener("click", (ev) => busy(ev.target, async () => {
+  if (!confirm(tx("pping.php_new_key_frage"))) return;
+  try { await api("POST", "/api/pushping/php-key", {}); msg("pk-msg", "ok", tx("pping.php_new_key_ok")); }
+  catch (e) { msg("pk-msg", "err", esc(e.message)); }
 }));
 $("pk-gs-up").addEventListener("click", (ev) => busy(ev.target, async () => {
   try { await api("POST", "/api/pushping/fcm-app", { google_services: $("pk-gs").value }); $("pk-gs").value = ""; msg("pk-fcm-msg", "ok", tx("js.gespeichert_3")); }

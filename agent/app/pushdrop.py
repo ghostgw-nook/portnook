@@ -153,5 +153,6 @@ class Publisher:
                 "upload_user": st.get("upload_user") or "", "upload_pass_set": bool(st.get("upload_pass")),
                 "cf_base": st.get("cf_base") or "", "cf_ready": pushstore.CloudflareWorker(self).ready(),
                 "script_base": st.get("script_base") or "", "script_ready": pushstore.SshScript(self).ready(),
+                "php_url": st.get("php_url") or "", "php_key_set": bool(st.get("php_key")),
                 "last_ok": self.rt["last_ok"], "last_error": self.rt["last_error"],
                 "read_warning": self.rt["read_warning"]}

@@ -11,14 +11,23 @@
   entry host itself: ``https://<entry host>/_pnd/<path>.bin``. The generated ``.htaccess`` leaves ``/_pnd/``
   alone (no redirect there).
 
+* ``php``: a single ``pn.php`` made by portnook (``php_script``) on any web space with PHP 7+, no SSH or WebDAV
+  needed. Uploads and deletes are HTTPS POSTs signed with a key only portnook and that file know
+  (HMAC-SHA256 over action, path, time and body hash; 5 minutes skew). The app fetches
+  ``pn.php?d=<path>`` without a login.
+
 All requests go through the VPN tunnel (``internet`` route; SSH runs from the container, whose default route
 is the tunnel). A backend raises ``httpc.HttpError`` on failure.
 """
 
 import base64
+import hashlib
+import hmac
 import json
 import re
+import secrets
 import subprocess
+import time
 
 from . import httpc
 
@@ -239,4 +248,102 @@ class SshScript:
         pass
 
 
-BACKENDS = {"webdav": WebDav, "cloudflare": CloudflareWorker, "script": SshScript}
+PHP_TEMPLATE = r"""<?php
+// portnook push ping storage. Made by portnook, do not edit; replace it with a new download when portnook
+// shows a new key. Files: one sealed, signed file per device (only that device can read it).
+//   GET  pn.php?d=<path>                       -> the file (no login, no cache)
+//   POST pn.php?a=put&d=<path>  (body = file)  -> store it   } signed: X-PN-Time, X-PN-Sig =
+//   POST pn.php?a=del&d=<path>                 -> delete it  } HMAC-SHA256(key, "a\nd\ntime\nsha256(body)")
+//   GET  pn.php?ping                           -> {"ok":true}
+const PN_KEY = '__KEY__';
+const PN_DIR = __DIR__ . '/pn-drops';
+header('Cache-Control: no-store');
+header('X-Content-Type-Options: nosniff');
+function pn_out($code, $text = '') { http_response_code($code); header('Content-Type: application/json'); echo $text; exit; }
+$d = isset($_GET['d']) ? preg_replace('/\.bin$/', '', (string) $_GET['d']) : '';
+if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+    if (isset($_GET['ping'])) pn_out(200, '{"ok":true,"v":1}');
+    if (!preg_match('/^[0-9a-f]{32}$/', $d) || !is_file(PN_DIR . "/$d.bin")) pn_out(404);
+    header('Content-Type: application/octet-stream');
+    header('Access-Control-Allow-Origin: *');
+    readfile(PN_DIR . "/$d.bin");
+    exit;
+}
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') pn_out(405);
+$a = isset($_GET['a']) ? (string) $_GET['a'] : '';
+$t = isset($_SERVER['HTTP_X_PN_TIME']) ? (string) $_SERVER['HTTP_X_PN_TIME'] : '';
+$sig = isset($_SERVER['HTTP_X_PN_SIG']) ? (string) $_SERVER['HTTP_X_PN_SIG'] : '';
+$body = file_get_contents('php://input', false, null, 0, 8192);
+if (!in_array($a, array('put', 'del'), true) || !preg_match('/^[0-9a-f]{32}$/', $d) || !ctype_digit($t)
+    || abs(time() - (int) $t) > 300) pn_out(400);
+$want = hash_hmac('sha256', "$a\n$d\n$t\n" . hash('sha256', $body), PN_KEY);
+if (!hash_equals($want, $sig)) pn_out(403);
+if (!is_dir(PN_DIR)) {
+    @mkdir(PN_DIR, 0755);
+    @file_put_contents(PN_DIR . '/.htaccess', "Require all denied\n");
+    @file_put_contents(PN_DIR . '/index.html', '');
+}
+if ($a === 'del') { @unlink(PN_DIR . "/$d.bin"); pn_out(200, '{"ok":true}'); }
+if (strlen($body) < 100 || substr($body, 0, 4) !== 'PNP1') pn_out(400);
+$tmp = PN_DIR . "/$d.tmp";
+if (file_put_contents($tmp, $body) === false || !rename($tmp, PN_DIR . "/$d.bin")) pn_out(500);
+pn_out(200, '{"ok":true}');
+"""
+
+
+def php_script(key):
+    return PHP_TEMPLATE.replace("__KEY__", key)
+
+
+def php_sign(key, action, path, when, body):
+    msg = "%s\n%s\n%d\n%s" % (action, path, when, hashlib.sha256(body).hexdigest())
+    return hmac.new(key.encode(), msg.encode(), hashlib.sha256).hexdigest()
+
+
+class PhpPage:
+    kind = "php"
+    whole = False
+
+    def __init__(self, pub):
+        self.pub = pub
+
+    def _cfg(self):
+        st = self.pub.agent.store.section("pushping")
+        return st.get("php_url") or "", st.get("php_key") or ""
+
+    def ready(self):
+        url, key = self._cfg()
+        return bool(url and key)
+
+    def base(self):
+        return self._cfg()[0]
+
+    def _send(self, action, name, body=b""):
+        if not _PATH.fullmatch(name):
+            raise httpc.HttpError("Dateiname ungültig")
+        url, key = self._cfg()
+        when = int(time.time())
+        res = self.pub.request("POST", "%s?a=%s&d=%s" % (url, action, name), body=body,
+                               headers={"Content-Type": "application/octet-stream", "X-PN-Time": str(when),
+                                        "X-PN-Sig": php_sign(key, action, name, when, body)},
+                               device=self.pub.agent.egress.route("internet"), timeout=20)
+        if res.status != 200:
+            hint = {403: " (Schlüssel passt nicht: pn.php neu herunterladen)", 400: " (Uhrzeit oder Anfrage)",
+                    404: " (pn.php nicht gefunden)"}.get(res.status, "")
+            raise httpc.HttpError("pn.php antwortete %d%s" % (res.status, hint))
+
+    def put(self, name, data):
+        self._send("put", name, data)
+
+    def delete(self, name):
+        self._send("del", name)
+
+    def finish(self, table):
+        pass
+
+
+def new_php_key():
+    return secrets.token_hex(32)
+
+
+BACKENDS = {"webdav": WebDav, "cloudflare": CloudflareWorker, "script": SshScript, "php": PhpPage}

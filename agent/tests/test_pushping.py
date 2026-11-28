@@ -621,6 +621,85 @@ class ScriptStorageTest(unittest.TestCase):
         self.assertEqual(self.calls, [])
 
 
+class FakePhp:
+    """pn.php: checks the signature like the PHP file does, keeps the files."""
+
+    def __init__(self, key):
+        self.key, self.files, self.calls = key, {}, []
+
+    def __call__(self, method, url, body=None, headers=None, device=None, timeout=20, **kw):
+        from app.pushstore import php_sign
+        import urllib.parse
+        q = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(url).query))
+        self.calls.append((method, q, device))
+        d = q.get("d", "")
+        if method == "GET":
+            return httpc.Response(200, {}, self.files[d]) if d in self.files else httpc.Response(404, {}, b"")
+        when = int(headers["X-PN-Time"])
+        if headers["X-PN-Sig"] != php_sign(self.key, q["a"], d, when, body or b""):
+            return httpc.Response(403, {}, b"")
+        if q["a"] == "put":
+            self.files[d] = body
+        else:
+            self.files.pop(d, None)
+        return httpc.Response(200, {}, b'{"ok":true}')
+
+
+@unittest.skipUnless(shutil.which("openssl"), "openssl CLI missing")
+class PhpStorageTest(unittest.TestCase):
+    def setUp(self):
+        from app import pushcrypto
+        from app.pushdrop import Publisher
+        self.pc = pushcrypto
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.store = Store(os.path.join(self.tmp, "agent.json"))
+        self.devices = Devices(self.tmp, self.store, request=FakeMedia())
+        self.devices.set_settings({"enabled": True, "media_url": "http://192.168.1.10:8096", "storage": "php",
+                                   "php_url": "https://www.example.ch/pn.php"})
+        self.key = self.store.section("pushping")["php_key"]
+        self.php = FakePhp(self.key)
+        self.agent = FakeAgent(self.store)
+        self.pub = Publisher(self.agent, self.devices, request=self.php, clock=lambda: 1000.0)
+        self.devkey = os.path.join(self.tmp, "dev.pem")
+        pushcrypto.generate_x25519_key(self.devkey)
+        self.dev = self.devices.register(GOOD, {"device_pub": pushcrypto.public_raw(self.devkey).hex()})
+        self.path = self.devices.get(self.dev["device_id"])["path"]
+
+    def test_signed_upload_and_public_fetch(self):
+        self.assertEqual(self.dev["drop_url"], "https://www.example.ch/pn.php?d=" + self.path)
+        self.pub.tick()
+        plain = json.loads(self.pc.open_drop(self.php.files[self.path], self.devkey, self.devices.sign_pub()))
+        self.assertEqual(plain["url"], "https://jf.familie-muster.example.ch:51234")
+        self.assertEqual(self.pub.status()["read_warning"], "")
+        self.assertTrue(all(c[2] == "internet" for c in self.php.calls))
+        self.assertNotIn(self.key, json.dumps(self.pub.status()) + json.dumps(self.devices.overview()))
+
+    def test_removed_device_is_deleted(self):
+        self.pub.tick()
+        self.devices.remove(self.dev["device_id"])
+        self.pub.tick()
+        self.assertEqual(self.php.files, {})
+
+    def test_wrong_key_is_reported(self):
+        self.php.key = "0" * 64
+        self.pub.tick()
+        self.assertIn("403", self.pub.status()["last_error"])
+        self.assertIn("neu herunterladen", self.pub.status()["last_error"])
+
+    def test_script_carries_the_key_and_a_new_key_replaces_it(self):
+        self.assertIn(self.key, self.devices.php_script())
+        new = self.devices.php_script(new_key=True)
+        self.assertNotIn(self.key, new)
+        self.assertNotEqual(self.store.section("pushping")["php_key"], self.key)
+
+    def test_php_url_must_be_https_php(self):
+        for bad in ("http://www.example.ch/pn.php", "https://www.example.ch/pn.txt"):
+            with self.assertRaises(ValidationError):
+                self.devices.set_settings({"enabled": True, "media_url": "http://192.168.1.10:8096",
+                                           "storage": "php", "php_url": bad})
+
+
 class FakeGoogle:
     def __init__(self):
         self.calls = []

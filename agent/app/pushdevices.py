@@ -18,7 +18,7 @@ import secrets
 import threading
 import time
 
-from . import httpc, pushcrypto
+from . import httpc, pushcrypto, pushstore
 from .log import log
 from .validate import ValidationError
 
@@ -28,7 +28,7 @@ PUSH_TOKEN_MAX = 4096
 PLATFORMS = ("android", "ios", "tvos", "other")
 DEFAULT_PORT = 8099
 REFRESH_MAX_HOURS = 168
-STORAGES = ("webdav", "cloudflare", "script")
+STORAGES = ("webdav", "cloudflare", "script", "php")
 _HEX64 = re.compile(r"[0-9a-f]{64}")
 _ID = re.compile(r"[0-9a-f]{16}")
 _TOKEN = re.compile(r"[A-Za-z0-9._~+/=-]{8,512}")
@@ -101,6 +101,12 @@ class Devices:
         if storage not in STORAGES:
             raise ValidationError("Ablage unbekannt.")
         values["storage"] = storage
+        php = str(body.get("php_url") or "").strip()
+        if php and not re.fullmatch(r"https://[A-Za-z0-9.\-:\[\]]+(/[A-Za-z0-9._~/%-]*)?\.php", php):
+            raise ValidationError("Adresse der PHP-Seite ungültig (https://…/pn.php).")
+        values["php_url"] = php
+        if storage == "php" and not self.store.section("pushping").get("php_key"):
+            values["php_key"] = pushstore.new_php_key()
         for key in ("media_url", "drop_base"):
             url = str(body.get(key) or "").strip().rstrip("/")
             if url and not re.fullmatch(r"https?://[A-Za-z0-9.\-:\[\]]+(/[A-Za-z0-9._~/-]*)?", url):
@@ -123,6 +129,16 @@ class Devices:
             self.ensure_key()
         log("push ping %s, device API port %d", "on" if values["enabled"] else "off", port)
         return self.overview()
+
+    def php_script(self, new_key=False):
+        """``pn.php`` with this portnook's key (a new key first when asked; the old file then stops working)."""
+        st = self.store.section("pushping")
+        key = st.get("php_key")
+        if new_key or not key:
+            key = pushstore.new_php_key()
+            self.store.update("pushping", {"php_key": key})
+            log("push ping: new key for pn.php")
+        return pushstore.php_script(key)
 
     def ensure_key(self):
         os.makedirs(self.dir, mode=0o700, exist_ok=True)
@@ -170,7 +186,7 @@ class Devices:
         for d in devices:
             d["push"] = bool(self.get(d["id"]).get("push_token"))
         pub = self.sign_pub()
-        hidden = ("push_token", "published_key", "published_drop")
+        hidden = ("push_token", "published_key", "published_drop")  # php_key is never in the overview
         devices = [{k: v for k, v in d.items() if k not in hidden} for d in devices]
         return {"settings": self.settings(), "devices": devices, "sign_pub": pub.hex() if pub else ""}
 
@@ -211,8 +227,13 @@ class Devices:
         kind = self.settings()["storage"]
         own = {"cloudflare": st.get("cf_base"), "script": st.get("script_base")}.get(kind, st.get("upload_url"))
         base = self.settings()["drop_base"] or own or ""  # empty = where the storage serves it
+        if kind == "php" and not self.settings()["drop_base"]:
+            php = st.get("php_url") or ""
+            base, fmt = php, "%s?d=%s"
+        else:
+            fmt = "%s/%s.bin"
         pub = self.sign_pub()
-        answer = {"device_id": device["id"], "drop_url": "%s/%s.bin" % (base, device["path"]) if base else "",
+        answer = {"device_id": device["id"], "drop_url": fmt % (base, device["path"]) if base else "",
                   "sign_pub": pub.hex() if pub else "", "seq": device["seq"]}
         fcm = self.fcm_options() if self.fcm_options and device.get("platform") == "android" else None
         if fcm:

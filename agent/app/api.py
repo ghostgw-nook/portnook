@@ -219,6 +219,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._send(200, self.agent.status())
         if method == "GET" and path == "/api/logs":
             return self._send(200, {"lines": logmod.lines()})
+        if method == "GET" and path == "/api/pushping/pn.php":
+            return self._send(200, self.agent.pushping.php_script().encode(), ctype="application/x-php",
+                              headers={"Content-Disposition": 'attachment; filename="pn.php"'})
         if method == "GET" and path == "/api/pushping":
             return self._send(200, dict(self.agent.pushping.overview(), upload=self.agent.pushdrop.status(),
                                          fcm=self.agent.pushfcm.status(), api_port=self.agent.pushapi.port))
@@ -286,6 +289,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self._send(200, self.agent.pushfcm.set_account(body))
             if path == "/api/pushping/fcm-app":
                 return self._send(200, self.agent.pushfcm.set_client(body))
+            if path == "/api/pushping/php-key":
+                self.agent.pushping.php_script(new_key=True)
+                return self._send(200, {"ok": True})
             if path == "/api/pushping/block":
                 return self._send(200, self.agent.pushping.set_blocked(body.get("id"), body.get("blocked")))
             if path == "/api/pushping/remove":
