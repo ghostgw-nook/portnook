@@ -28,7 +28,7 @@ PUSH_TOKEN_MAX = 4096
 PLATFORMS = ("android", "ios", "tvos", "other")
 DEFAULT_PORT = 8099
 REFRESH_MAX_HOURS = 168
-STORAGES = ("webdav", "cloudflare")
+STORAGES = ("webdav", "cloudflare", "script")
 _HEX64 = re.compile(r"[0-9a-f]{64}")
 _ID = re.compile(r"[0-9a-f]{16}")
 _TOKEN = re.compile(r"[A-Za-z0-9._~+/=-]{8,512}")
@@ -202,7 +202,8 @@ class Devices:
     # -- device changes ----------------------------------------------------------------
     def _answer(self, device):
         st = self.store.section("pushping")
-        own = st.get("cf_base") if self.settings()["storage"] == "cloudflare" else st.get("upload_url")
+        kind = self.settings()["storage"]
+        own = {"cloudflare": st.get("cf_base"), "script": st.get("script_base")}.get(kind, st.get("upload_url"))
         base = self.settings()["drop_base"] or own or ""  # empty = where the storage serves it
         pub = self.sign_pub()
         return {"device_id": device["id"], "drop_url": "%s/%s.bin" % (base, device["path"]) if base else "",

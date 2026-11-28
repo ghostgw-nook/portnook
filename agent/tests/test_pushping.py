@@ -5,6 +5,7 @@ import json
 import os
 import shutil
 import stat
+import subprocess
 import tempfile
 import threading
 import unittest
@@ -498,6 +499,91 @@ class CloudflareStorageTest(unittest.TestCase):
         self.cf.calls = []
         self.pub.tick()
         self.assertEqual(self.cf.calls, [])
+
+
+class FakeSshRedirect:
+    """Redirect with an SSH key; ``_p`` paths and the target as the real one has them."""
+
+    def __init__(self, agent, tmp):
+        self.agent, self.tmp = agent, tmp
+
+    def _p(self, name):
+        return os.path.join(self.tmp, name)
+
+    def ssh_public(self):
+        return "ssh-ed25519 AAAA portnook"
+
+    def target(self):
+        return {"url": "https://jf.familie-muster.example.ch:51234", "host": "jf.familie-muster.example.ch",
+                "port": 51234, "ip": "203.0.113.7"}
+
+
+@unittest.skipUnless(shutil.which("openssl"), "openssl CLI missing")
+class ScriptStorageTest(unittest.TestCase):
+    """The remote command runs for real in a local shell (the web space is a temp folder)."""
+
+    def setUp(self):
+        from app import pushcrypto, pushstore
+        from app.pushdrop import Publisher
+        self.pc, self.ps = pushcrypto, pushstore
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.web = os.path.join(self.tmp, "web")
+        os.makedirs(os.path.join(self.web, "httpdocs"))
+        self.store = Store(os.path.join(self.tmp, "agent.json"))
+        self.store.update("redirect", {"provider": "script", "entry_host": "start.example.ch",
+                                       "gen": {"kind": "htaccess", "user": "web1", "host": "server.example.ch",
+                                               "port": 2222, "root": "httpdocs"}})
+        self.devices = Devices(self.tmp, self.store, request=FakeMedia())
+        self.devices.set_settings({"enabled": True, "media_url": "http://192.168.1.10:8096", "storage": "script"})
+        self.agent = FakeAgent(self.store)
+        self.agent.redirect = FakeSshRedirect(self.agent, self.tmp)
+        self.calls = []
+        real = subprocess.run
+
+        def fake_run(args, input=b"", **kw):
+            self.calls.append(args)
+            return real(["sh", "-c", args[-1]], input=input, cwd=self.web, **kw)
+        self.ps._run = fake_run
+        self.addCleanup(setattr, self.ps, "_run", real)
+        self.pub = Publisher(self.agent, self.devices, request=None, clock=lambda: 1000.0)
+        self.pub.resolve()
+        self.devkey = os.path.join(self.tmp, "dev.pem")
+        pushcrypto.generate_x25519_key(self.devkey)
+        self.dev = self.devices.register(GOOD, {"device_pub": pushcrypto.public_raw(self.devkey).hex()})
+
+    def test_file_lands_in_the_web_space(self):
+        path = self.devices.get(self.dev["device_id"])["path"]
+        self.assertEqual(self.dev["drop_url"], "https://start.example.ch/_pnd/%s.bin" % path)
+        self.pub.tick()
+        folder = os.path.join(self.web, "httpdocs", "_pnd")
+        with open(os.path.join(folder, path + ".bin"), "rb") as fh:
+            plain = json.loads(self.pc.open_drop(fh.read(), self.devkey, self.devices.sign_pub()))
+        self.assertEqual(plain["url"], "https://jf.familie-muster.example.ch:51234")
+        with open(os.path.join(folder, ".htaccess")) as fh:
+            self.assertEqual(fh.read(), self.ps.DIR_HTACCESS)
+        self.assertTrue(os.path.exists(os.path.join(folder, "index.html")))
+        args = self.calls[0]
+        self.assertIn("web1@server.example.ch", args)
+        self.assertEqual(args[args.index("-p") + 1], "2222")
+
+    def test_removed_device_file_is_deleted(self):
+        self.pub.tick()
+        path = self.devices.get(self.dev["device_id"])["path"]
+        self.devices.remove(self.dev["device_id"])
+        self.pub.tick()
+        self.assertFalse(os.path.exists(os.path.join(self.web, "httpdocs", "_pnd", path + ".bin")))
+        self.assertEqual(self.devices.orphans(), [])
+
+    def test_htaccess_leaves_drop_folder_alone(self):
+        from app.redirect import htaccess
+        self.assertIn("RewriteCond %{REQUEST_URI} !^/_pnd/", htaccess([("start.example.ch", "https://a:1")], 302))
+
+    def test_not_ready_without_generator(self):
+        self.store.update("redirect", {"gen": {"kind": ""}})
+        self.calls = []
+        self.pub.tick()
+        self.assertEqual(self.calls, [])
 
 
 class FakeGoogle:

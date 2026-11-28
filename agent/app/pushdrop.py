@@ -121,10 +121,13 @@ class Publisher:
                 store.resolve()
             except httpc.HttpError as err:
                 self.rt["last_error"] = str(err)[:200]
+        elif store.kind == "script":
+            self.agent.store.update("pushping", {"script_base": store.base()})
 
     def status(self):
         st = self.agent.store.section("pushping")
         return {"storage": self.devices.settings()["storage"], "upload_url": st.get("upload_url") or "",
                 "upload_user": st.get("upload_user") or "", "upload_pass_set": bool(st.get("upload_pass")),
                 "cf_base": st.get("cf_base") or "", "cf_ready": pushstore.CloudflareWorker(self).ready(),
+                "script_base": st.get("script_base") or "", "script_ready": pushstore.SshScript(self).ready(),
                 "last_ok": self.rt["last_ok"], "last_error": self.rt["last_error"]}

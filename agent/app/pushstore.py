@@ -6,12 +6,19 @@
   Every publish uploads the whole Worker (a drop is ~250 bytes, 100 devices ~35 KB). Token permission:
   Workers Scripts: Edit (as for round robin / workers.dev).
 
-All requests go through the VPN tunnel (``internet`` route). A backend raises ``httpc.HttpError`` on failure.
+* ``script``: the web space of the redirect script (generator settings: SSH user, host, port, web root, and the
+  SSH key made for the redirect). Files go to ``<web root>/_pnd/<path>.bin`` over SSH and are served by the
+  entry host itself: ``https://<entry host>/_pnd/<path>.bin``. The generated ``.htaccess`` leaves ``/_pnd/``
+  alone (no redirect there).
+
+All requests go through the VPN tunnel (``internet`` route; SSH runs from the container, whose default route
+is the tunnel). A backend raises ``httpc.HttpError`` on failure.
 """
 
 import base64
 import json
 import re
+import subprocess
 
 from . import httpc
 
@@ -157,4 +164,79 @@ class CloudflareWorker:
             self.pub.agent.store.update("pushping", {"cf_base": url})
 
 
-BACKENDS = {"webdav": WebDav, "cloudflare": CloudflareWorker}
+_run = subprocess.run  # tests replace this
+DROP_DIR = "_pnd"
+SSH_TIMEOUT = 30
+# no "Options" (some hosts forbid it in .htaccess and answer 500); an empty index.html stops listings
+DIR_HTACCESS = "<IfModule mod_headers.c>\n  Header always set Cache-Control \"no-store\"\n</IfModule>\n"
+
+
+class SshScript:
+    kind = "script"
+    whole = False
+
+    def __init__(self, pub):
+        self.pub = pub
+
+    def _source(self):
+        """``(gen settings, entry host)`` of the first script provider made with the generator, else ``None``."""
+        red = self.pub.agent.redirect
+        cfg = self.pub.agent.store.section("redirect")
+        if cfg.get("provider") == "script" and (cfg.get("gen") or {}).get("kind"):
+            hosts = [cfg.get("entry_host") or ""]
+        else:
+            x = next((x for x in cfg.get("providers") or []
+                      if x.get("kind") == "script" and (x.get("gen") or {}).get("kind")), None)
+            if x is None:
+                return None
+            tgt = red.target() or {"url": "https://x"}
+            try:
+                hosts = [e for e, _ in red.mappings(cfg, tgt, via=x["id"])]
+            except Exception:  # an unknown target only hides the address, the upload still works
+                hosts = []
+            cfg = x
+        host = next((h for h in hosts if h and not h.startswith("*.")), "")
+        return cfg["gen"], host
+
+    def ready(self):
+        return self._source() is not None and self.pub.agent.redirect.ssh_public() != ""
+
+    def base(self):
+        src = self._source()
+        return "https://%s/%s" % (src[1], DROP_DIR) if src and src[1] else ""
+
+    def _ssh(self, command, data=b""):
+        g, _ = self._source()
+        red = self.pub.agent.redirect
+        args = ["ssh", "-i", red._p("id_ed25519"), "-p", str(g["port"]), "-o", "BatchMode=yes",
+                "-o", "ConnectTimeout=15", "-o", "StrictHostKeyChecking=accept-new",
+                "-o", "UserKnownHostsFile=" + red._p("known_hosts"), "%s@%s" % (g["user"], g["host"]), command]
+        try:
+            res = _run(args, input=data, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=SSH_TIMEOUT)
+        except (OSError, subprocess.TimeoutExpired) as err:
+            raise httpc.HttpError("SSH: %s" % (getattr(err, "strerror", None) or err.__class__.__name__))
+        if res.returncode != 0:
+            raise httpc.HttpError("SSH rc %d: %s" % (res.returncode, res.stderr.decode("utf-8", "replace").strip()[-160:]))
+
+    def _dir(self):
+        g, _ = self._source()
+        return "%s/%s" % (g["root"], DROP_DIR)  # root is checked by redirect.check_gen (no quotes, no ..)
+
+    def put(self, name, data):
+        if not _PATH.fullmatch(name):
+            raise httpc.HttpError("Dateiname ungültig")
+        d = self._dir()
+        # the .htaccess text has no single quote, % or backslash, so printf's format can carry it with \n
+        self._ssh("mkdir -p '{d}' && touch '{d}/index.html' && printf '{h}' > '{d}/.htaccess' && "
+                  "cat > '{d}/{n}.bin.tmp' && mv '{d}/{n}.bin.tmp' '{d}/{n}.bin'"
+                  .format(d=d, n=name, h=DIR_HTACCESS.replace("\n", "\\n")), data)
+
+    def delete(self, name):
+        if _PATH.fullmatch(name):
+            self._ssh("rm -f '%s/%s.bin'" % (self._dir(), name))
+
+    def finish(self, table):
+        pass
+
+
+BACKENDS = {"webdav": WebDav, "cloudflare": CloudflareWorker, "script": SshScript}

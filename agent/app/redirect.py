@@ -97,7 +97,8 @@ def addr_groups(n):
 
 
 def htaccess(rules, status):
-    """``.htaccess`` for all rules: /.well-known/ stays local (certificate of the entry host), no caching.
+    """``.htaccess`` for all rules: /.well-known/ stays local (certificate of the entry host) and so does /_pnd/
+    (push ping files, 0.40.0), no caching.
     A rule with several target URLs (round robin, 0.28.0) gets one block per target with a condition on the
     client address; the last target takes the rest."""
     out = ["# managed by portnook, do not edit", "RewriteEngine On"]
@@ -107,6 +108,7 @@ def htaccess(rules, status):
         for i, u in enumerate(urls):
             # host condition last: %1 refers to the last matched condition
             out.append(r"RewriteCond %{REQUEST_URI} !^/\.well-known/")
+            out.append(r"RewriteCond %{REQUEST_URI} !^/_pnd/")  # 0.40.0: push ping files stay local
             if i < len(urls) - 1:
                 out.append("RewriteCond %%{REMOTE_ADDR} [%s]$ [NC]" % groups[i])
             out += ["RewriteCond %%{HTTP_HOST} %s [NC]" % _host_re(entry),

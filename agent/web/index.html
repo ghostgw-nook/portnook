@@ -668,9 +668,11 @@ h3 { font-size: 14px; margin: 16px 0 4px; }
     <div class="cols">
       <div><label for="pp-storage">{{pp.ablage_art}}</label><select id="pp-storage">
         <option value="cloudflare">{{pp.ablage_cloudflare}}</option>
+        <option value="script">{{pp.ablage_script}}</option>
         <option value="webdav">{{pp.ablage_webdav}}</option></select></div>
     </div>
     <p class="hint" id="pp-cf-hint">{{pp.ablage_cloudflare_hint}}</p>
+    <p class="hint" id="pp-script-hint">{{pp.ablage_script_hint}}</p>
     <div class="cols" id="pp-dav">
       <div><label for="pp-up">{{pp.webdav}}</label><input type="text" id="pp-up" placeholder="https://dav.example.ch/pn" spellcheck="false" autocomplete="off"></div>
       <div><label for="pp-user">{{pp.benutzer}}</label><input type="text" id="pp-user" spellcheck="false" autocomplete="off"></div>
@@ -1640,6 +1642,7 @@ async function refreshPushPing() {
   }
   $("pp-pass-state").textContent = up.upload_pass_set ? tx("js.gespeichert") : "";
   const where = s.storage === "cloudflare" ? (up.cf_base || (up.cf_ready ? tx("pp.noch_nichts") : tx("pp.kein_cf_token")))
+    : s.storage === "script" ? (up.script_ready ? (up.script_base || tx("pp.noch_nichts")) : tx("pp.kein_script"))
     : (up.upload_url || tx("js.kein_ziel_eingerichtet"));
   const rows = [[tx("pp.gerate_api"), !s.enabled ? tx("pp.aus") : p.api_port ? tx("pp.hort_auf") + p.api_port : tx("pp.nicht_bereit")],
     [tx("pp.ablage"), where + " - " + (up.last_error ? tx("pp.fehler") + up.last_error
@@ -1657,8 +1660,9 @@ async function refreshPushPing() {
     esc(tx("js.loschen")) + "</button></td></tr>").join("") : '<tr><td colspan="6" class="muted">' + esc(tx("pp.keine_gerate")) + "</td></tr>";
 }
 function ppStorage() {
-  const cf = $("pp-storage").value === "cloudflare";
-  $("pp-dav").classList.toggle("hidden", cf); $("pp-cf-hint").classList.toggle("hidden", !cf);
+  const v = $("pp-storage").value;
+  $("pp-dav").classList.toggle("hidden", v !== "webdav"); $("pp-cf-hint").classList.toggle("hidden", v !== "cloudflare");
+  $("pp-script-hint").classList.toggle("hidden", v !== "script");
 }
 $("pp-storage").addEventListener("change", ppStorage);
 $("pp-save").addEventListener("click", (ev) => busy(ev.target, async () => {
