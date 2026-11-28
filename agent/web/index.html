@@ -646,66 +646,66 @@ h3 { font-size: 14px; margin: 16px 0 4px; }
 </section>
 <!-- Push ping (0.40.0): devices fetch their address from a sealed drop -->
 <section id="v-pushping" class="hidden">
-  <h2 class="sec">{{pp.titel}}</h2>
-  <p class="lead">{{pp.lead}}</p>
+  <h2 class="sec">{{pping.titel}}</h2>
+  <p class="lead">{{pping.lead}}</p>
   <div class="card">
-    <h2><span class="dot" id="pp-dot"></span>{{ui.stand}}</h2>
-    <dl id="pp-state"></dl>
+    <h2><span class="dot" id="pk-dot"></span>{{ui.stand}}</h2>
+    <dl id="pk-state"></dl>
   </div>
   <div class="card">
-    <h2>{{pp.einstellungen}}</h2>
-    <details class="help"><summary>{{ui.hilfe}}</summary><p>{{pp.hilfe_ablauf}}</p>
-      <p>{{pp.hilfe_proxy}} <code>/_pn/</code> &rarr; <code>http://&lt;portnook&gt;:&lt;Port&gt;/_pn/</code></p>
-      <p>{{pp.hilfe_ablage}}</p></details>
-    <label class="inline"><input type="checkbox" id="pp-on"> {{pp.einschalten}}</label>
+    <h2>{{pping.einstellungen}}</h2>
+    <details class="help"><summary>{{ui.hilfe}}</summary><p>{{pping.hilfe_ablauf}}</p>
+      <p>{{pping.hilfe_proxy}} <code>/_pn/</code> &rarr; <code>http://&lt;portnook&gt;:&lt;Port&gt;/_pn/</code></p>
+      <p>{{pping.hilfe_ablage}}</p></details>
+    <label class="inline"><input type="checkbox" id="pk-on"> {{pping.einschalten}}</label>
     <div class="cols">
-      <div><label for="pp-port">{{pp.port}}</label><input type="text" id="pp-port" inputmode="numeric" placeholder="8099"></div>
-      <div><label for="pp-media">{{pp.mediaserver}}</label><input type="text" id="pp-media" placeholder="http://192.168.1.30:8096" spellcheck="false" autocomplete="off"></div>
-      <div><label for="pp-refresh">{{pp.erneuern}}</label><input type="text" id="pp-refresh" inputmode="numeric" placeholder="0"></div>
+      <div><label for="pk-port">{{pping.port}}</label><input type="text" id="pk-port" inputmode="numeric" placeholder="8099"></div>
+      <div><label for="pk-media">{{pping.mediaserver}}</label><input type="text" id="pk-media" placeholder="http://192.168.1.30:8096" spellcheck="false" autocomplete="off"></div>
+      <div><label for="pk-refresh">{{pping.erneuern}}</label><input type="text" id="pk-refresh" inputmode="numeric" placeholder="0"></div>
     </div>
-    <p class="hint">{{pp.erneuern_hint}}</p>
-    <h3>{{pp.ablage}}</h3>
+    <p class="hint">{{pping.erneuern_hint}}</p>
+    <h3>{{pping.ablage}}</h3>
     <div class="cols">
-      <div><label for="pp-storage">{{pp.ablage_art}}</label><select id="pp-storage">
-        <option value="cloudflare">{{pp.ablage_cloudflare}}</option>
-        <option value="script">{{pp.ablage_script}}</option>
-        <option value="webdav">{{pp.ablage_webdav}}</option></select></div>
+      <div><label for="pk-storage">{{pping.ablage_art}}</label><select id="pk-storage">
+        <option value="cloudflare">{{pping.ablage_cloudflare}}</option>
+        <option value="script">{{pping.ablage_script}}</option>
+        <option value="webdav">{{pping.ablage_webdav}}</option></select></div>
     </div>
-    <p class="hint" id="pp-cf-hint">{{pp.ablage_cloudflare_hint}}</p>
-    <p class="hint" id="pp-script-hint">{{pp.ablage_script_hint}}</p>
-    <div class="cols" id="pp-dav">
-      <div><label for="pp-up">{{pp.webdav}}</label><input type="text" id="pp-up" placeholder="https://dav.example.ch/pn" spellcheck="false" autocomplete="off"></div>
-      <div><label for="pp-user">{{pp.benutzer}}</label><input type="text" id="pp-user" spellcheck="false" autocomplete="off"></div>
-      <div><label for="pp-pass">{{pp.passwort}} <span class="muted small" id="pp-pass-state"></span></label><input type="password" id="pp-pass" placeholder="{{myaddr.leer_lassen_unverandert}}" autocomplete="off"></div>
+    <p class="hint" id="pk-cf-hint">{{pping.ablage_cloudflare_hint}}</p>
+    <p class="hint" id="pk-script-hint">{{pping.ablage_script_hint}}</p>
+    <div class="cols" id="pk-dav">
+      <div><label for="pk-up">{{pping.webdav}}</label><input type="text" id="pk-up" placeholder="https://dav.example.ch/pn" spellcheck="false" autocomplete="off"></div>
+      <div><label for="pk-user">{{pping.benutzer}}</label><input type="text" id="pk-user" spellcheck="false" autocomplete="off"></div>
+      <div><label for="pk-pass">{{pping.passwort}} <span class="muted small" id="pk-pass-state"></span></label><input type="password" id="pk-pass" placeholder="{{myaddr.leer_lassen_unverandert}}" autocomplete="off"></div>
     </div>
     <div class="cols">
-      <div><label for="pp-base">{{pp.abruf}}</label><input type="text" id="pp-base" placeholder="https://dav.example.ch/pn" spellcheck="false" autocomplete="off"></div>
+      <div><label for="pk-base">{{pping.abruf}}</label><input type="text" id="pk-base" placeholder="https://dav.example.ch/pn" spellcheck="false" autocomplete="off"></div>
     </div>
-    <p class="hint">{{pp.abruf_hint}}</p>
-    <div class="actions"><button class="primary" type="button" id="pp-save">{{myaddr.speichern}}</button></div>
-    <div id="pp-msg"></div>
+    <p class="hint">{{pping.abruf_hint}}</p>
+    <div class="actions"><button class="primary" type="button" id="pk-save">{{myaddr.speichern}}</button></div>
+    <div id="pk-msg"></div>
   </div>
   <div class="card">
-    <h2>{{pp.firebase}}</h2>
-    <details class="help"><summary>{{ui.hilfe}}</summary><p>{{pp.firebase_hilfe}}</p></details>
-    <p class="small" id="pp-fcm-state"></p>
-    <label for="pp-sa">{{pp.dienstkonto}}</label>
-    <textarea id="pp-sa" rows="4" spellcheck="false" autocomplete="off" placeholder='{"type": "service_account", ...}'></textarea>
-    <div class="actions"><button type="button" id="pp-sa-up">{{pp.dienstkonto_hochladen}}</button>
-      <button type="button" id="pp-sa-clear">{{pp.dienstkonto_entfernen}}</button></div>
-    <label for="pp-gs">{{pp.app_konfig}} <span class="muted small" id="pp-gs-state"></span></label>
-    <textarea id="pp-gs" rows="3" spellcheck="false" autocomplete="off" placeholder='{"project_info": ...}'></textarea>
-    <p class="hint">{{pp.app_konfig_hint}}</p>
-    <div class="actions"><button type="button" id="pp-gs-up">{{pp.app_konfig_speichern}}</button></div>
-    <div id="pp-fcm-msg"></div>
+    <h2>{{pping.firebase}}</h2>
+    <details class="help"><summary>{{ui.hilfe}}</summary><p>{{pping.firebase_hilfe}}</p></details>
+    <p class="small" id="pk-fcm-state"></p>
+    <label for="pk-sa">{{pping.dienstkonto}}</label>
+    <textarea id="pk-sa" rows="4" spellcheck="false" autocomplete="off" placeholder='{"type": "service_account", ...}'></textarea>
+    <div class="actions"><button type="button" id="pk-sa-up">{{pping.dienstkonto_hochladen}}</button>
+      <button type="button" id="pk-sa-clear">{{pping.dienstkonto_entfernen}}</button></div>
+    <label for="pk-gs">{{pping.app_konfig}} <span class="muted small" id="pk-gs-state"></span></label>
+    <textarea id="pk-gs" rows="3" spellcheck="false" autocomplete="off" placeholder='{"project_info": ...}'></textarea>
+    <p class="hint">{{pping.app_konfig_hint}}</p>
+    <div class="actions"><button type="button" id="pk-gs-up">{{pping.app_konfig_speichern}}</button></div>
+    <div id="pk-fcm-msg"></div>
   </div>
   <div class="card">
-    <h2>{{pp.gerate}}</h2>
+    <h2>{{pping.gerate}}</h2>
     <div class="tablewrap"><table>
-      <thead><tr><th>{{vpn.name}}</th><th>{{pp.benutzer}}</th><th>{{pp.plattform}}</th><th>{{pp.push}}</th><th>{{pp.veroffentlicht}}</th><th></th></tr></thead>
-      <tbody id="pp-list"></tbody>
+      <thead><tr><th>{{vpn.name}}</th><th>{{pping.benutzer}}</th><th>{{pping.plattform}}</th><th>{{pping.push}}</th><th>{{pping.veroffentlicht}}</th><th></th></tr></thead>
+      <tbody id="pk-list"></tbody>
     </table></div>
-    <div id="pp-list-msg"></div>
+    <div id="pk-list-msg"></div>
   </div>
 </section>
 <section id="v-log" class="hidden">
@@ -1639,80 +1639,80 @@ async function refreshPushPing() {
   const s = p.settings, up = p.upload, f = p.fcm;
   if (!S.ppFilled) {
     S.ppFilled = true;
-    $("pp-on").checked = s.enabled; $("pp-port").value = s.port || ""; $("pp-media").value = s.media_url || "";
-    $("pp-refresh").value = s.refresh_hours || 0;
-    $("pp-storage").value = s.storage || "webdav"; ppStorage();
-    $("pp-up").value = up.upload_url || ""; $("pp-user").value = up.upload_user || ""; $("pp-base").value = s.drop_base || "";
+    $("pk-on").checked = s.enabled; $("pk-port").value = s.port || ""; $("pk-media").value = s.media_url || "";
+    $("pk-refresh").value = s.refresh_hours || 0;
+    $("pk-storage").value = s.storage || "webdav"; ppStorage();
+    $("pk-up").value = up.upload_url || ""; $("pk-user").value = up.upload_user || ""; $("pk-base").value = s.drop_base || "";
   }
-  $("pp-pass-state").textContent = up.upload_pass_set ? tx("js.gespeichert") : "";
-  const where = s.storage === "cloudflare" ? (up.cf_base || (up.cf_ready ? tx("pp.noch_nichts") : tx("pp.kein_cf_token")))
-    : s.storage === "script" ? (up.script_ready ? (up.script_base || tx("pp.noch_nichts")) : tx("pp.kein_script"))
+  $("pk-pass-state").textContent = up.upload_pass_set ? tx("js.gespeichert") : "";
+  const where = s.storage === "cloudflare" ? (up.cf_base || (up.cf_ready ? tx("pping.noch_nichts") : tx("pping.kein_cf_token")))
+    : s.storage === "script" ? (up.script_ready ? (up.script_base || tx("pping.noch_nichts")) : tx("pping.kein_script"))
     : (up.upload_url || tx("js.kein_ziel_eingerichtet"));
-  const rows = [[tx("pp.gerate_api"), !s.enabled ? tx("pp.aus") : p.api_port ? tx("pp.hort_auf") + p.api_port : tx("pp.nicht_bereit")],
-    [tx("pp.ablage"), where + " - " + (up.last_error ? tx("pp.fehler") + up.last_error
-      : up.last_ok ? tx("pp.ok") + age(up.last_ok) : tx("pp.noch_nichts"))],
-    up.read_warning ? [tx("pp.abruf_test"), up.read_warning] : null,
-    [tx("pp.firebase"), !f.account_set ? tx("pp.kein_konto") : f.last_error ? tx("pp.fehler") + f.last_error :
+  const rows = [[tx("pping.gerate_api"), !s.enabled ? tx("pping.aus") : p.api_port ? tx("pping.hort_auf") + p.api_port : tx("pping.nicht_bereit")],
+    [tx("pping.ablage"), where + " - " + (up.last_error ? tx("pping.fehler") + up.last_error
+      : up.last_ok ? tx("pping.ok") + age(up.last_ok) : tx("pping.noch_nichts"))],
+    up.read_warning ? [tx("pping.abruf_test"), up.read_warning] : null,
+    [tx("pping.firebase"), !f.account_set ? tx("pping.kein_konto") : f.last_error ? tx("pping.fehler") + f.last_error :
       f.project_id + (f.last_ok ? tx("js.ok_3") + age(f.last_ok) + " (" + f.sent + ")" : "")],
-    [tx("pp.gerate"), String(p.devices.length)]];
-  if (p.sign_pub) rows.push([tx("pp.signatur"), p.sign_pub.slice(0, 16) + "…"]);
-  dot("pp-dot", !s.enabled ? "" : (!p.api_port || up.last_error || f.last_error) ? "err" : up.read_warning ? "warn" : up.last_ok ? "ok" : "warn");
-  $("pp-state").innerHTML = dl(rows);
-  $("pp-fcm-state").textContent = f.account_set ? tx("pp.projekt") + f.project_id : tx("pp.kein_konto");
-  $("pp-gs-state").textContent = (f.client_apps || []).join(", ");
-  $("pp-list").innerHTML = p.devices.length ? p.devices.map((d) => "<tr><td>" + esc(d.name) + "</td><td>" + esc(d.user_name) +
-    "</td><td>" + esc(d.platform) + "</td><td>" + esc(d.push ? tx("pp.ja") : tx("pp.nein")) + "</td><td>" +
-    esc(d.blocked ? tx("pp.gesperrt") : d.published_at ? age(d.published_at) : tx("js.nie")) +
-    '</td><td><button type="button" data-pp-block="' + esc(d.id) + '" data-on="' + (d.blocked ? "0" : "1") + '">' +
-    esc(d.blocked ? tx("pp.entsperren") : tx("pp.sperren")) + '</button> <button type="button" data-pp-del="' + esc(d.id) + '">' +
-    esc(tx("js.loschen")) + "</button></td></tr>").join("") : '<tr><td colspan="6" class="muted">' + esc(tx("pp.keine_gerate")) + "</td></tr>";
+    [tx("pping.gerate"), String(p.devices.length)]];
+  if (p.sign_pub) rows.push([tx("pping.signatur"), p.sign_pub.slice(0, 16) + "…"]);
+  dot("pk-dot", !s.enabled ? "" : (!p.api_port || up.last_error || f.last_error) ? "err" : up.read_warning ? "warn" : up.last_ok ? "ok" : "warn");
+  $("pk-state").innerHTML = dl(rows);
+  $("pk-fcm-state").textContent = f.account_set ? tx("pping.projekt") + f.project_id : tx("pping.kein_konto");
+  $("pk-gs-state").textContent = (f.client_apps || []).join(", ");
+  $("pk-list").innerHTML = p.devices.length ? p.devices.map((d) => "<tr><td>" + esc(d.name) + "</td><td>" + esc(d.user_name) +
+    "</td><td>" + esc(d.platform) + "</td><td>" + esc(d.push ? tx("pping.ja") : tx("pping.nein")) + "</td><td>" +
+    esc(d.blocked ? tx("pping.gesperrt") : d.published_at ? age(d.published_at) : tx("js.nie")) +
+    '</td><td><button type="button" data-pk-block="' + esc(d.id) + '" data-on="' + (d.blocked ? "0" : "1") + '">' +
+    esc(d.blocked ? tx("pping.entsperren") : tx("pping.sperren")) + '</button> <button type="button" data-pk-del="' + esc(d.id) + '">' +
+    esc(tx("js.loschen")) + "</button></td></tr>").join("") : '<tr><td colspan="6" class="muted">' + esc(tx("pping.keine_gerate")) + "</td></tr>";
 }
 function ppStorage() {
-  const v = $("pp-storage").value;
-  $("pp-dav").classList.toggle("hidden", v !== "webdav"); $("pp-cf-hint").classList.toggle("hidden", v !== "cloudflare");
-  $("pp-script-hint").classList.toggle("hidden", v !== "script");
+  const v = $("pk-storage").value;
+  $("pk-dav").classList.toggle("hidden", v !== "webdav"); $("pk-cf-hint").classList.toggle("hidden", v !== "cloudflare");
+  $("pk-script-hint").classList.toggle("hidden", v !== "script");
 }
-$("pp-storage").addEventListener("change", ppStorage);
-$("pp-save").addEventListener("click", (ev) => busy(ev.target, async () => {
-  const b = { enabled: $("pp-on").checked, storage: $("pp-storage").value, port: $("pp-port").value.trim() || 8099, media_url: $("pp-media").value.trim(),
-              refresh_hours: $("pp-refresh").value.trim() || 0,
-              drop_base: $("pp-base").value.trim(), upload_url: $("pp-up").value.trim(), upload_user: $("pp-user").value.trim() };
-  if ($("pp-pass").value) b.upload_pass = $("pp-pass").value;
-  try { await api("POST", "/api/pushping", b); $("pp-pass").value = ""; msg("pp-msg", "ok", tx("js.gespeichert_3")); }
-  catch (e) { msg("pp-msg", "err", esc(e.message)); }
+$("pk-storage").addEventListener("change", ppStorage);
+$("pk-save").addEventListener("click", (ev) => busy(ev.target, async () => {
+  const b = { enabled: $("pk-on").checked, storage: $("pk-storage").value, port: $("pk-port").value.trim() || 8099, media_url: $("pk-media").value.trim(),
+              refresh_hours: $("pk-refresh").value.trim() || 0,
+              drop_base: $("pk-base").value.trim(), upload_url: $("pk-up").value.trim(), upload_user: $("pk-user").value.trim() };
+  if ($("pk-pass").value) b.upload_pass = $("pk-pass").value;
+  try { await api("POST", "/api/pushping", b); $("pk-pass").value = ""; msg("pk-msg", "ok", tx("js.gespeichert_3")); }
+  catch (e) { msg("pk-msg", "err", esc(e.message)); }
   refreshPushPing();
 }));
-$("pp-sa-up").addEventListener("click", (ev) => busy(ev.target, async () => {
-  try { await api("POST", "/api/pushping/fcm", { service_account: $("pp-sa").value }); $("pp-sa").value = ""; msg("pp-fcm-msg", "ok", tx("js.gespeichert_3")); }
-  catch (e) { msg("pp-fcm-msg", "err", esc(e.message)); }
+$("pk-sa-up").addEventListener("click", (ev) => busy(ev.target, async () => {
+  try { await api("POST", "/api/pushping/fcm", { service_account: $("pk-sa").value }); $("pk-sa").value = ""; msg("pk-fcm-msg", "ok", tx("js.gespeichert_3")); }
+  catch (e) { msg("pk-fcm-msg", "err", esc(e.message)); }
   refreshPushPing();
 }));
-$("pp-gs-up").addEventListener("click", (ev) => busy(ev.target, async () => {
-  try { await api("POST", "/api/pushping/fcm-app", { google_services: $("pp-gs").value }); $("pp-gs").value = ""; msg("pp-fcm-msg", "ok", tx("js.gespeichert_3")); }
-  catch (e) { msg("pp-fcm-msg", "err", esc(e.message)); }
+$("pk-gs-up").addEventListener("click", (ev) => busy(ev.target, async () => {
+  try { await api("POST", "/api/pushping/fcm-app", { google_services: $("pk-gs").value }); $("pk-gs").value = ""; msg("pk-fcm-msg", "ok", tx("js.gespeichert_3")); }
+  catch (e) { msg("pk-fcm-msg", "err", esc(e.message)); }
   refreshPushPing();
 }));
-$("pp-sa-clear").addEventListener("click", (ev) => busy(ev.target, async () => {
-  if (!confirm(tx("pp.dienstkonto_entfernen_frage"))) return;
-  try { await api("POST", "/api/pushping/fcm", { clear: true }); msg("pp-fcm-msg", "ok", tx("pp.entfernt")); }
-  catch (e) { msg("pp-fcm-msg", "err", esc(e.message)); }
+$("pk-sa-clear").addEventListener("click", (ev) => busy(ev.target, async () => {
+  if (!confirm(tx("pping.dienstkonto_entfernen_frage"))) return;
+  try { await api("POST", "/api/pushping/fcm", { clear: true }); msg("pk-fcm-msg", "ok", tx("pping.entfernt")); }
+  catch (e) { msg("pk-fcm-msg", "err", esc(e.message)); }
   refreshPushPing();
 }));
 document.addEventListener("click", (ev) => {
-  const b = ev.target.closest("button[data-pp-block]");
+  const b = ev.target.closest("button[data-pk-block]");
   if (!b) return;
   busy(b, async () => {
-    try { await api("POST", "/api/pushping/block", { id: b.dataset.ppBlock, blocked: b.dataset.on === "1" }); msg("pp-list-msg", "", ""); }
-    catch (e) { msg("pp-list-msg", "err", esc(e.message)); }
+    try { await api("POST", "/api/pushping/block", { id: b.dataset.pkBlock, blocked: b.dataset.on === "1" }); msg("pk-list-msg", "", ""); }
+    catch (e) { msg("pk-list-msg", "err", esc(e.message)); }
     refreshPushPing();
   });
 });
 document.addEventListener("click", (ev) => {
-  const b = ev.target.closest("button[data-pp-del]");
-  if (!b || !confirm(tx("pp.gerat_loschen_frage"))) return;
+  const b = ev.target.closest("button[data-pk-del]");
+  if (!b || !confirm(tx("pping.gerat_loschen_frage"))) return;
   busy(b, async () => {
-    try { await api("POST", "/api/pushping/remove", { id: b.dataset.ppDel }); msg("pp-list-msg", "ok", tx("pp.entfernt")); }
-    catch (e) { msg("pp-list-msg", "err", esc(e.message)); }
+    try { await api("POST", "/api/pushping/remove", { id: b.dataset.pkDel }); msg("pk-list-msg", "ok", tx("pping.entfernt")); }
+    catch (e) { msg("pk-list-msg", "err", esc(e.message)); }
     refreshPushPing();
   });
 });
